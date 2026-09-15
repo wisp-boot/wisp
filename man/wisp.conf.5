@@ -1,0 +1,132 @@
+.TH WISP.CONF 5 "2026-09-15" "wisp 0.1.0" "File Formats"
+.SH NAME
+wisp.conf \- runtime configuration, module selection and key providers of a wisp initramfs
+.SH DESCRIPTION
+The builder,
+.BR wisp (8),
+reads three files under
+.IR /etc/wisp .
+None of them is required.
+.SS /etc/wisp/wisp.conf
+Lines of
+.IR key " = " value ;
+.B #
+starts a comment; unknown keys are ignored and never stop a boot. The builder
+completes the file (see below) and places the completed copy at
+.I /etc/wisp/wisp.conf
+inside the initramfs, where it is part of the archive bytes and therefore of
+whatever measures the archive. The kernel command line is consulted only for
+values the file does not set:
+.BR root= ", " rootfstype= ", " rd.luks.uuid= ", " rd.luks.name= .
+.TP
+.BI key " = none | passphrase | credential | " name
+How the volume key is obtained.
+.B none
+skips LUKS entirely and mounts the root file system directly.
+.B passphrase
+asks on the console, three attempts.
+.B credential
+reads
+.I /.extra/credentials/cryptsetup.passphrase
+from the initramfs, the file a pre-kernel stage may append as an extra cpio
+archive (the systemd-stub credential convention); the file is unlinked after
+reading, and when it is missing the passphrase prompt is the recovery path.
+Any other
+.I name
+is a key provider, see below. Default: passphrase when
+.I /etc/crypttab
+has a LUKS entry, none otherwise.
+.TP
+.BI luks.uuid " = " uuid
+The LUKS2 container. Taken from the first LUKS entry of
+.I /etc/crypttab
+when absent.
+.TP
+.BI luks.name " = " name
+The device-mapper name of the opened container. Taken from the running
+system or from
+.I /etc/crypttab
+when absent; default
+.BR root .
+.TP
+.BI luks.header " = " path
+A detached header copy. The file is placed in the initramfs at the same path
+and used instead of the header on the device.
+.TP
+.BI root " = " device " | UUID=" uuid
+The root file system. Taken from the running system when absent.
+.TP
+.BI rootfstype " = " type
+Optional; the type is otherwise probed from the superblock (ext4, xfs, btrfs).
+.SS /etc/wisp/modules
+One entry per line: a module
+.I name
+(its dependencies are resolved), or a directory selector against the path
+inside
+.IR /lib/modules/ version :
+.B +dir:
+.I subtree
+includes every module under it,
+.B \-dir:
+.I subtree
+removes a subtree again and wins over
+.B +dir
+regardless of line order. Subtrees match whole path components. Cutouts shape
+only the selected set; a dependency that lives in an excluded subtree is still
+pulled in when a selected module needs it. Without this file a broad built-in
+selection is used: NVMe, ATA, SCSI, block, MMC, MD, USB (without gadget), HID,
+input, I2C, virtio, TPM, the simple frame buffer driver, crypto, ext4, xfs,
+btrfs, and the device-mapper modules.
+.PP
+Modules are loaded at boot only when their alias matches present hardware, so
+declaring many costs archive size, not boot time.
+.SS /etc/wisp/lvm.tab
+The device-mapper table of the root logical volume, as
+.B dmsetup table
+prints it, with the backing device replaced by
+.BR @crypt@ :
+.PP
+.nf
+    name ubuntu--vg-ubuntu--lv
+    0 77328384 linear @crypt@ 2048
+.fi
+.PP
+Without this file the builder records the table from the running system when
+the root file system is a linear logical volume directly over the dm-crypt
+device. Any other topology (several physical volumes, striped, thin, RAID,
+LVM without LUKS) is rejected at build time. After resizing the root volume,
+rebuild the initramfs.
+.SH KEY PROVIDERS
+A key provider is an executable
+.IR /usr/lib/wisp/key/ name
+with an optional configuration directory
+.IR /etc/wisp/key/ name / .
+When
+.B key
+names a provider, the builder places both in the initramfs at the same paths.
+At boot,
+.BR wisp-init (7)
+runs the provider once. Protocol version 1:
+.TP
+arguments
+.BI "\-\-protocol 1 \-\-device " "luks-device" " \-\-name " dm-name
+.TP
+environment
+.BR WISP_PROTOCOL=1 ", " WISP_LUKS_DEVICE ", " WISP_LUKS_NAME ", " PATH
+.TP
+file descriptors
+0, 1 and 2 are the console: the provider runs its own dialogue. 3 is the write
+end of a pipe: the provider writes the raw key bytes (1 to 512) and exits 0.
+.TP
+exit status
+0 success; 10 wrong secret; 11 state or policy mismatch; 12 hardware missing;
+13 aborted by the user; anything else is a failure. The init halts on every
+non-zero status and does not retry.
+.PP
+The provider process owns everything sensitive it computes and has ended
+before the container is opened. Provider names are lower-case, up to 32
+characters of letters, digits, hyphen and underscore.
+.SH SEE ALSO
+.BR wisp (8),
+.BR wisp-init (7),
+.BR crypttab (5)

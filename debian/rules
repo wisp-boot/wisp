@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+export CGO_ENABLED = 0
+export GOFLAGS = -mod=vendor -trimpath
+export GOTOOLCHAIN = local
+export GOCACHE = $(CURDIR)/build/.gocache
+VERSION := $(shell dpkg-parsechangelog -SVersion)
+LDFLAGS := -s -w -buildid= -X main.version=$(VERSION)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	go build -ldflags "$(LDFLAGS)" -o build/wisp-init ./cmd/wisp-init
+	go build -ldflags "$(LDFLAGS)" -o build/wisp ./cmd/wisp
+
+override_dh_auto_test:
+	go test ./...
+
+override_dh_auto_clean:
+	rm -rf build
+
+# The binaries are static Go programs, already stripped by the linker and
+# reproducible only if nothing touches them afterwards.
+override_dh_strip:
+override_dh_dwz:

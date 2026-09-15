@@ -1,0 +1,2 @@
+build/wisp-init usr/lib/wisp
+build/wisp usr/sbin

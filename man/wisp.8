@@ -1,0 +1,112 @@
+.TH WISP 8 "2026-09-15" "wisp 0.1.0" "System Administration"
+.SH NAME
+wisp \- build a reproducible initramfs from declared inputs
+.SH SYNOPSIS
+.B wisp build
+.RI [ \-k " version" ]
+.RI [ \-o " file" ]
+.RB [ \-\-compress
+.IR none | zstd ]
+.RI [ \-\-manifest " file" ]
+.RI [ \-\-stage " dir" ]
+.RB [ \-v ]
+.br
+.B wisp manifest
+.RI [ \-k " version" ]
+.RI [ \-\-stage " dir" ]
+.br
+.B wisp resolve
+.RI [ \-k " version" ]
+.IR selector ...
+.br
+.B update-initramfs
+.BR \-c | \-u | \-d
+.RI [ \-k " version" | all ]
+.RI [ \-b " dir" ]
+.RB [ \-v ]
+.SH DESCRIPTION
+.B wisp
+assembles an initramfs whose bytes are a pure function of a manifest and the
+kernel package's module tree. It does not scan the running machine for
+loaded modules, does not copy binaries found by their shared libraries, and
+does not stamp file system times into the archive. Two machines with the same
+kernel package and the same declared inputs produce the same bytes.
+.PP
+The initramfs holds one static program as
+.IR /init ,
+.BR wisp-init (7),
+the resolved kernel modules, and the measured configuration
+.BR wisp.conf (5).
+.PP
+The same binary is installed as
+.B /usr/sbin/update-initramfs
+and as the kernel maintainer hooks under
+.IR /etc/kernel/postinst.d " and " /etc/kernel/postrm.d ,
+so kernel packages and other software keep working as with initramfs-tools.
+.SH VERBS
+.TP
+.B build
+Assemble the manifest for the kernel (see
+.BR wisp.conf (5)
+for the inputs), resolve the modules, and write the archive to
+.IR /boot/initrd.img\- version
+(or
+.BR \-o ).
+The output is written to a temporary file and renamed, so a failed build
+leaves the previous initrd untouched. With
+.B \-\-manifest
+an explicit manifest is built instead of assembling one. With
+.B \-\-stage
+the assembled manifest and every generated file are kept in
+.IR dir ,
+which is what a verifier needs to rebuild the same bytes elsewhere.
+.B \-v
+lists the modules that went in. The compressed size, the SHA-256 of the
+output and the SHA-256 of the uncompressed archive are printed.
+.TP
+.B manifest
+Print the manifest that
+.B build
+would use.
+.TP
+.B resolve
+Show the module resolution for names and selectors against
+.IR /lib/modules/ version :
+the files in load order, the names that are built into the kernel, and any
+that are missing.
+.TP
+.B update-initramfs
+The initramfs-tools compatible facade.
+.B \-c
+and
+.B \-u
+build,
+.B \-d
+deletes;
+.B \-k
+selects a version or
+.BR all ,
+the default is the newest installed kernel;
+.B \-b
+selects the boot directory.
+.B \-t
+is accepted and ignored. Unknown options are an error.
+.SH FILES
+.TP
+.I /etc/wisp/wisp.conf
+The runtime configuration, completed by the builder and placed in the initramfs.
+.TP
+.I /etc/wisp/modules
+Module names and directory selectors; a built-in list is used when absent.
+.TP
+.I /etc/wisp/lvm.tab
+A hand-maintained volume table; otherwise recorded from the running system.
+.TP
+.I /usr/lib/wisp/key/
+Key providers, see
+.BR wisp.conf (5).
+.SH EXIT STATUS
+0 on success, 1 on any failure. The kernel hooks return 2 when called without a version.
+.SH SEE ALSO
+.BR wisp.conf (5),
+.BR wisp-init (7)

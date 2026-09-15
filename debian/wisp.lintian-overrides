@@ -1,0 +1,2 @@
+# static Go binaries: no shared libraries by design (the initramfs holds nothing else)
+wisp: statically-linked-binary

@@ -1,0 +1,7 @@
+wisp (0.1.0) unstable; urgency=medium
+
+  * First release: reproducible initramfs builder and pure-Go /init.
+    Coldplug without udev, LUKS2 without cryptsetup, linear LVM without
+    lvm2, key sources none/passphrase/credential and external key providers.
+
+ -- Richard Robert Reitz <reitzrobert77@gmail.com>  Tue, 15 Sep 2026 13:21:50 +0200

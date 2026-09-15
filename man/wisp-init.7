@@ -1,0 +1,56 @@
+.TH WISP-INIT 7 "2026-09-15" "wisp 0.1.0" "Miscellaneous"
+.SH NAME
+wisp-init \- the /init of a wisp initramfs
+.SH DESCRIPTION
+.B wisp-init
+is one static program that brings a machine from "kernel running, nothing
+mounted, root encrypted" to "the real operating system runs on the decrypted
+root". It has no shell, no udev, no cryptsetup and no lvm2 inside. Seven steps:
+.IP 1. 4
+Mount proc, sysfs, devtmpfs and a tmpfs on /run.
+.IP 2. 4
+Coldplug: read every
+.I modalias
+under /sys/devices, match it against the alias patterns of the modules in the
+archive (the kernel's own fnmatch semantics), load the matches with their
+dependencies, and repeat until a round loads nothing new, because a bus driver
+makes its children appear. If the LUKS container has not appeared, every
+storage module in the archive is loaded; if no input device exists, every HID
+and input module.
+.IP 3. 4
+Wait for the LUKS2 container with the configured UUID, up to 30 seconds.
+.IP 4. 4
+Obtain the key according to
+.B key
+in
+.BR wisp.conf (5):
+none, passphrase, credential, or a key provider process.
+.IP 5. 4
+Recover the volume key from a keyslot in pure Go and create the dm-crypt
+mapping through the device-mapper ioctl. If a volume table was recorded,
+replay it over the dm-crypt device to activate the root logical volume.
+.IP 6. 4
+Find the root file system by UUID or path and mount it read-only.
+.IP 7. 4
+Move the pseudo file systems, chroot, and execute /sbin/init.
+.PP
+On any failure the init prints the reason and halts. There is no rescue shell:
+an initramfs with a shell is an initramfs with a root shell for whoever holds
+the keyboard. Power off and boot the previous kernel, whose initrd is left in
+place when wisp is installed, or a rescue medium.
+.SH WHAT IS AND IS NOT INSIDE
+The archive holds the init, the resolved modules of exactly one kernel, the
+completed
+.BR wisp.conf (5),
+optionally a volume table, a detached header copy and one key provider with
+its configuration. No firmware files, no network, no splash screen, no resume
+from hibernation, no file system check.
+.SH SUPPORTED LAYOUTS
+LUKS2 (aes-xts, SHA-2 or SHA-3 hashes) holding either the root file system
+directly or one linear logical volume; a root file system without LUKS on a
+plain partition; ext4, xfs and single-device btrfs. Not supported: LUKS1,
+software RAID, multi-device btrfs, LUKS on a logical volume, LVM without LUKS,
+striped, thin or RAID logical volumes.
+.SH SEE ALSO
+.BR wisp (8),
+.BR wisp.conf (5)

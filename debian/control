@@ -1,0 +1,25 @@
+Source: wisp
+Section: admin
+Priority: optional
+Maintainer: Richard Robert Reitz <reitzrobert77@gmail.com>
+Build-Depends: debhelper-compat (= 13), golang-go (>= 2:1.22~)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://git.reitzrobert77.de/staging/wisp
+
+Package: wisp
+Architecture: amd64
+Depends: ${misc:Depends}, dmsetup
+Provides: linux-initramfs-tool
+Conflicts: initramfs-tools, dracut
+Description: reproducible pure-Go initramfs for encrypted root file systems
+ wisp builds an initramfs whose bytes are a pure function of a declared
+ manifest and the kernel package: same inputs, same bytes, so its hash can
+ be predicted on another machine. The initramfs holds one static Go binary
+ as /init, which finds the hardware without udev, opens LUKS2 without
+ cryptsetup, activates a linear logical volume without lvm2, and switches
+ to the real root. Nothing is scanned from the running machine at build
+ time and nothing is parsed before it is measured at boot time.
+ .
+ wisp replaces initramfs-tools: it writes /boot/initrd.img-<version>, is
+ called by the kernel hooks, and answers to update-initramfs.
