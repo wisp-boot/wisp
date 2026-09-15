@@ -1,0 +1,15 @@
+kernel = 9.9.9-test
+source_epoch = 0
+
+[modules]
+builtin_thing
++dir:kernel/drivers
++dir:kernel/fs
++dir:kernel/crypto
+-dir:kernel/drivers/net
+-dir:kernel/drivers/gpu
+-dir:sound
+
+[files]
+/init = init
+/lib64 = link:usr/lib64

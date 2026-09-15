@@ -1,0 +1,7 @@
+kernel/crypto/aes.ko
+kernel/drivers/base.ko
+kernel/drivers/char/tpm.ko
+kernel/drivers/mid.ko
+kernel/fs/ext4.ko
+kernel/drivers/net/helper.ko
+kernel/fs/netfs.ko

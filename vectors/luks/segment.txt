@@ -1,0 +1,6 @@
+uuid=c594b515-44b7-4d0e-b0b3-af0d85ca5dd3
+encryption=aes-xts-plain64
+sector_size=4096
+offset=1048576
+size=1048576
+iv_tweak=0
