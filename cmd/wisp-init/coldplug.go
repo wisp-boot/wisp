@@ -66,14 +66,16 @@ type aliasEntry struct {
 // modTree is the indexed module tree plus a lazy cache of each module's .modinfo.
 type modTree struct {
 	*kmod.Tree
-	info map[string]modInfo
+	info   map[string]modInfo
+	params map[string]string // module key -> parameters from the kernel command line
 }
 
 func newModTree() *modTree {
 	var uts unix.Utsname
 	unix.Uname(&uts)
 	dir := filepath.Join("/lib/modules", unix.ByteSliceToString(uts.Release[:]))
-	return &modTree{Tree: kmod.Load(dir), info: map[string]modInfo{}}
+	cl, _ := os.ReadFile("/proc/cmdline")
+	return &modTree{Tree: kmod.Load(dir), info: map[string]modInfo{}, params: moduleParams(string(cl))}
 }
 
 func (t *modTree) infoFor(key string) modInfo {
@@ -146,7 +148,7 @@ func (t *modTree) loadRec(con *Console, key string, loaded, inProgress map[strin
 	if loaded[key] {
 		return n
 	}
-	if err := insmod(path); err != nil && err != unix.EEXIST {
+	if err := insmod(path, t.params[key]); err != nil && err != unix.EEXIST {
 		con.Say("wisp-init: module %s: %v", t.Index[key], err)
 	}
 	loaded[key] = true

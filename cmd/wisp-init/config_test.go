@@ -32,3 +32,13 @@ func TestParseConfigIgnoresJunk(t *testing.T) {
 		t.Fatalf("parse: %#v", m)
 	}
 }
+
+func TestModuleParams(t *testing.T) {
+	m := moduleParams("root=/dev/x quiet nvme_core.default_ps_max_latency_us=0 i915.enable_psr=0 i915.fastboot=1 dm-crypt.foo=bar =x a.=1 /dev/sda.x=1")
+	if m["nvme_core"] != "default_ps_max_latency_us=0" || m["i915"] != "enable_psr=0 fastboot=1" || m["dm_crypt"] != "foo=bar" {
+		t.Fatalf("%#v", m)
+	}
+	if len(m) != 3 {
+		t.Fatalf("unexpected keys: %#v", m)
+	}
+}

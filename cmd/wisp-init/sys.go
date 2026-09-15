@@ -34,8 +34,10 @@ func mountPseudoFS() {
 	}
 }
 
-// 2. modules: finit_module on a file, compressed or not (the kernel decompresses).
-func insmod(path string) error {
+// 2. modules: finit_module on a file, compressed or not (the kernel
+// decompresses). params are the module's parameters as modprobe would pass
+// them ("a=1 b=2"), taken from the kernel command line.
+func insmod(path, params string) error {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
@@ -45,7 +47,33 @@ func insmod(path string) error {
 	if !strings.HasSuffix(path, ".ko") {
 		flags = unix.MODULE_INIT_COMPRESSED_FILE
 	}
-	return unix.FinitModule(fd, "", flags)
+	return unix.FinitModule(fd, params, flags)
+}
+
+// moduleParams collects the module parameters given on the kernel command
+// line, as modprobe does: a token "name.param=value" belongs to module name
+// (hyphens and underscores are equivalent in the name). The kernel applies
+// such tokens itself only to built-in modules; for loadable ones the loader
+// has to pass them.
+func moduleParams(cmdline string) map[string]string {
+	out := map[string]string{}
+	for _, tok := range strings.Fields(cmdline) {
+		dot := strings.IndexByte(tok, '.')
+		eq := strings.IndexByte(tok, '=')
+		if dot <= 0 || eq < 0 || dot+1 >= eq {
+			continue
+		}
+		name := strings.ReplaceAll(tok[:dot], "-", "_")
+		param := tok[dot+1:]
+		if strings.ContainsAny(name, "/ ") || param == "" {
+			continue
+		}
+		if out[name] != "" {
+			out[name] += " "
+		}
+		out[name] += param
+	}
+	return out
 }
 
 // 3. the LUKS container
