@@ -51,7 +51,6 @@ var defaultModules = []string{
 	"dm_mod",
 	"dm_crypt",
 	"simpledrm",
-	"efifb",
 	"+dir:kernel",
 	"-dir:kernel/net",
 	"-dir:kernel/drivers/net",
