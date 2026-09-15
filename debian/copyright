@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: wisp
-Source: https://git.reitzrobert77.de/staging/wisp
+Source: https://github.com/wisp-boot/wisp
 
 Files: *
 Copyright: 2026 Richard Robert Reitz

@@ -5,7 +5,7 @@ Maintainer: Richard Robert Reitz <reitzrobert77@gmail.com>
 Build-Depends: debhelper-compat (= 13), golang-go (>= 2:1.22~)
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
-Homepage: https://git.reitzrobert77.de/staging/wisp
+Homepage: https://github.com/wisp-boot/wisp
 
 Package: wisp
 Architecture: amd64
