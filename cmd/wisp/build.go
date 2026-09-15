@@ -39,22 +39,38 @@ const (
 
 // defaultModules is the broad, laptop-oriented selection used when
 // /etc/wisp/modules does not exist: everything a machine may need to reach
-// its disk, keyboard and screen; the coldplug loads only what is present.
+// its disk, keyboard and screen, including the buses in between (Thunderbolt
+// docks, SPI keyboards, pin controllers behind i2c-hid); the coldplug loads
+// only what is present. Left out on purpose: network, sound, media,
+// Bluetooth, GPUs beyond the simple frame buffer, staging, InfiniBand.
 var defaultModules = []string{
 	"dm_mod",
 	"dm_crypt",
+	// storage and the buses that reach it
 	"+dir:kernel/drivers/nvme",
 	"+dir:kernel/drivers/ata",
 	"+dir:kernel/drivers/scsi",
 	"+dir:kernel/drivers/block",
 	"+dir:kernel/drivers/mmc",
+	"+dir:kernel/drivers/ufs",
 	"+dir:kernel/drivers/md",
 	"+dir:kernel/drivers/usb",
 	"-dir:kernel/drivers/usb/gadget",
+	"+dir:kernel/drivers/thunderbolt",
+	"+dir:kernel/drivers/virtio",
+	"+dir:kernel/drivers/pci",
+	"+dir:kernel/drivers/phy",
+	// keyboards, touchpads and the buses and controllers they hang on
 	"+dir:kernel/drivers/hid",
 	"+dir:kernel/drivers/input",
 	"+dir:kernel/drivers/i2c",
-	"+dir:kernel/drivers/virtio",
+	"+dir:kernel/drivers/spi",
+	"+dir:kernel/drivers/pinctrl",
+	"+dir:kernel/drivers/gpio",
+	"+dir:kernel/drivers/mfd",
+	"+dir:kernel/drivers/platform",
+	"+dir:kernel/drivers/acpi",
+	// the TPM, the frame buffer, crypto for dm-crypt, root file systems
 	"+dir:kernel/drivers/char/tpm",
 	"+dir:kernel/drivers/gpu/drm/tiny",
 	"+dir:kernel/crypto",

@@ -74,9 +74,12 @@ removes a subtree again and wins over
 regardless of line order. Subtrees match whole path components. Cutouts shape
 only the selected set; a dependency that lives in an excluded subtree is still
 pulled in when a selected module needs it. Without this file a broad built-in
-selection is used: NVMe, ATA, SCSI, block, MMC, MD, USB (without gadget), HID,
-input, I2C, virtio, TPM, the simple frame buffer driver, crypto, ext4, xfs,
-btrfs, and the device-mapper modules.
+selection is used: storage (NVMe, ATA, SCSI, block, MMC, UFS, MD, virtio) and
+the buses that reach it (USB without gadget, Thunderbolt, PCI, PHY); input
+(HID, input, I2C, SPI, pin controllers, GPIO, MFD, platform, ACPI); the TPM,
+the simple frame buffer driver, crypto, lib, ext4, xfs, btrfs, and the
+device-mapper modules. Left out: network, sound, media, Bluetooth, GPUs
+beyond the simple frame buffer, staging, InfiniBand.
 .PP
 Modules are loaded at boot only when their alias matches present hardware, so
 declaring many costs archive size, not boot time.

@@ -65,7 +65,8 @@ root       = /dev/mapper/ubuntu--vg-ubuntu--lv
 
 `/etc/wisp/modules`, module names and directory selectors (`+dir:kernel/drivers/nvme`,
 `-dir:kernel/drivers/usb/gadget`). Without it a broad laptop-oriented selection is used, about
-22 MB compressed on an Ubuntu kernel. Modules are loaded at boot only when hardware matches, so
+26 MB compressed on an Ubuntu kernel (storage, input and the buses between them, including
+Thunderbolt docks and SPI keyboards; no network, sound, media or GPUs beyond the simple frame buffer). Modules are loaded at boot only when hardware matches, so
 declaring many costs size, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
