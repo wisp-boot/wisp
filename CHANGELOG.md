@@ -15,8 +15,13 @@ First release.
   the passphrase runs on the firmware frame buffer, as in Ubuntu's own initramfs).
 - Firmware: the files named by the selected modules are placed under /lib/firmware in the
   archive (`firmware = modules`, the default), symlinks kept so each file is stored once.
-  About 70 MB for the default selection on an Ubuntu kernel.
+  About 78 MB for the default selection on an Ubuntu kernel, microcode included.
 - Blacklists from /etc/modprobe.d are honoured by the coldplug (alias matches only).
+- CPU microcode (`microcode = all`, the default): the amd64-microcode and intel-microcode files
+  concatenated into the uncompressed early cpio the kernel's early loader reads, prepended to
+  the archive. No selection tool; a pure function of the two packages.
+- Manifest keys `firmware` and `microcode` are additions to the manifest format; a verifier
+  that reproduces archives must implement them.
 - `wisp`: manifest assembly from `/etc/wisp` and `/etc/crypttab`, deterministic newc cpio,
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`
   facade, kernel hooks.

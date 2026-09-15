@@ -18,6 +18,8 @@ import (
 //	source_epoch  = 0                    the mtime stamped on every entry
 //	firmware      = modules              copy the firmware files the selected modules name
 //	                                     (from /lib/firmware, symlinks kept); absent: no firmware
+//	microcode     = all                  prepend an uncompressed cpio with the CPU microcode
+//	                                     (/lib/firmware/{amd,intel}-ucode concatenated); absent: none
 //
 //	[modules]                            module names and/or directory selectors
 //	nvme                                   a name (dependencies are resolved)
@@ -36,6 +38,7 @@ type Manifest struct {
 	Kernel      string
 	SourceEpoch int64
 	Firmware    string // "" (none) or "modules"
+	Microcode   string // "" (none) or "all"
 	Modules     []string
 	Cmdline     []string
 	Files       []FileSpec
@@ -112,6 +115,14 @@ func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 					v = ""
 				}
 				m.Firmware = v
+			case "microcode":
+				if v != "all" && v != "none" && v != "" {
+					return nil, fmt.Errorf("microcode = %q: expected all or none", v)
+				}
+				if v == "none" {
+					v = ""
+				}
+				m.Microcode = v
 			}
 		case "modules":
 			m.Modules = append(m.Modules, s)
@@ -158,6 +169,9 @@ func (m *Manifest) String() string {
 	fmt.Fprintf(&b, "kernel        = %s\nsource_epoch  = %d\n", m.Kernel, m.SourceEpoch)
 	if m.Firmware != "" {
 		fmt.Fprintf(&b, "firmware      = %s\n", m.Firmware)
+	}
+	if m.Microcode != "" {
+		fmt.Fprintf(&b, "microcode     = %s\n", m.Microcode)
 	}
 	if len(m.Modules) > 0 {
 		b.WriteString("\n[modules]\n")

@@ -375,3 +375,35 @@ func TestFirmwarePlacement(t *testing.T) {
 		t.Fatal("bad firmware value accepted")
 	}
 }
+
+func TestMicrocodeCpio(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "amd-ucode"), 0o755)
+	os.MkdirAll(filepath.Join(root, "intel-ucode"), 0o755)
+	os.WriteFile(filepath.Join(root, "amd-ucode/microcode_amd.bin"), []byte("AMD1"), 0o644)
+	os.WriteFile(filepath.Join(root, "amd-ucode/microcode_amd_fam17h.bin"), []byte("AMD2"), 0o644)
+	os.WriteFile(filepath.Join(root, "amd-ucode/README"), []byte("no"), 0o644)
+	os.WriteFile(filepath.Join(root, "intel-ucode/06-8e-09"), []byte("I1"), 0o644)
+	os.WriteFile(filepath.Join(root, "intel-ucode/06-55-04"), []byte("I0"), 0o644)
+	a, err := MicrocodeCpio(root, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := MicrocodeCpio(root, 0)
+	if !bytes.Equal(a, b) {
+		t.Fatal("not deterministic")
+	}
+	got := map[string]string{}
+	for _, m := range readCpio(t, a) {
+		got[m.name] = string(m.data)
+	}
+	if got["kernel/x86/microcode/AuthenticAMD.bin"] != "AMD1AMD2" || got["kernel/x86/microcode/GenuineIntel.bin"] != "I0I1" {
+		t.Fatalf("%#v", got)
+	}
+	if n, _ := MicrocodeCpio(t.TempDir(), 0); n != nil {
+		t.Fatal("expected nil without microcode directories")
+	}
+	if _, err := ParseManifestString("kernel = x\nmicrocode = some\n", root); err == nil {
+		t.Fatal("bad microcode value accepted")
+	}
+}

@@ -63,6 +63,11 @@ var defaultModules = []string{
 	"-dir:kernel/drivers/bluetooth",
 	"-dir:kernel/drivers/iio",
 	"-dir:kernel/drivers/hwmon",
+	"-dir:kernel/drivers/accel",
+	"-dir:kernel/drivers/crypto",
+	"-dir:kernel/drivers/usb/atm",
+	"-dir:kernel/drivers/usb/serial",
+	"-dir:kernel/drivers/usb/misc",
 	"-dir:kernel/kernel",
 	"-dir:kernel/zfs",
 }
@@ -122,6 +127,11 @@ func cmdBuild(args []string) int {
 		}
 		note = fmt.Sprintf(", cpio %d bytes sha256=%s", len(blob), res.SHA256())
 		blob = z
+	}
+	if len(res.Early) > 0 {
+		// the early cpio with the CPU microcode precedes the (compressed) main archive
+		note += fmt.Sprintf(", microcode %d bytes", len(res.Early))
+		blob = append(append([]byte(nil), res.Early...), blob...)
 	}
 	tmp := o.output + ".new"
 	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
@@ -320,9 +330,13 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 		m.Modules = append(m.Modules, defaultModules...)
 	}
 
-	// 2b. firmware: the files the selected modules name, unless wisp.conf says firmware = none
+	// 2b. firmware: the files the selected modules name, unless wisp.conf says firmware = none;
+	//     microcode: the CPU microcode as an early cpio, unless microcode = none
 	if conf["firmware"] != "none" {
 		m.Firmware = "modules"
+	}
+	if conf["microcode"] != "none" {
+		m.Microcode = "all"
 	}
 
 	// 2c. blacklist from /etc/modprobe.d: modules the coldplug must not load on an alias match

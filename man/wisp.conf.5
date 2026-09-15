@@ -65,6 +65,15 @@ Whether the firmware files named by the selected modules (their
 fields) are copied from /lib/firmware into the archive. Symbolic links are
 kept, so the many names that point at one file cost one copy. Default
 .BR modules .
+.TP
+.BI microcode " = all | none"
+Whether the CPU microcode is prepended as an uncompressed early cpio, the
+form the kernel's early loader reads: kernel/x86/microcode/AuthenticAMD.bin
+and GenuineIntel.bin, each the sorted concatenation of the files under
+/lib/firmware/amd-ucode and /lib/firmware/intel-ucode (the amd64-microcode
+and intel-microcode packages). No selection tool is involved; the loader
+finds the running CPU's entry itself. Default
+.BR all .
 .SS /etc/wisp/modules
 One entry per line: a module
 .I name
@@ -84,7 +93,8 @@ pulled in when a selected module needs it. Without this file the selection is, i
 the spirit of initramfs-tools' "most", every module of the kernel except the
 subtrees that cannot matter before the root file system is mounted: network,
 sound, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
-kheaders module and ZFS, and GPUs: as in Ubuntu's own initramfs the console
+kheaders module and ZFS, hardware crypto accelerators, USB modems, serial
+adapters and gadgets, and GPUs: as in Ubuntu's own initramfs the console
 before the passphrase prompt runs on the firmware frame buffer (built-in
 simpledrm), and the real GPU driver comes with the system. About 3200
 modules, 53 MB compressed, plus the firmware the selected modules name

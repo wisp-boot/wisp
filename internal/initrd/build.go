@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
@@ -19,6 +20,7 @@ import (
 // Result is a built initrd.
 type Result struct {
 	Cpio            []byte      // the uncompressed archive
+	Early           []byte      // the uncompressed early cpio with the CPU microcode, or nil
 	Resolution      *Resolution // which modules went in
 	FirmwareFiles   int         // firmware entries placed (files and symlinks)
 	FirmwareMissing []string    // firmware names the modules declare that the firmware root lacks
@@ -93,7 +95,70 @@ func Build(m *Manifest, modulesRoot string) (*Result, error) {
 		return nil, err
 	}
 	result.Cpio = WriteCpio(t.Entries(), m.SourceEpoch)
+	if m.Microcode == "all" {
+		early, err := MicrocodeCpio(FirmwareRoot, m.SourceEpoch)
+		if err != nil {
+			return nil, err
+		}
+		result.Early = early
+	}
 	return result, nil
+}
+
+// MicrocodeCpio builds the early cpio the kernel's microcode loader reads:
+// kernel/x86/microcode/AuthenticAMD.bin and GenuineIntel.bin, each the
+// concatenation, in sorted file order, of the vendor's microcode files under
+// the firmware root (amd-ucode/*.bin, intel-ucode/*). The loader scans the
+// blob for the running CPU's entry, so no selection tool is needed and the
+// result is a pure function of the two microcode packages. The archive must
+// stay uncompressed and precede the main archive. Nil if neither directory
+// exists.
+func MicrocodeCpio(root string, sourceEpoch int64) ([]byte, error) {
+	concat := func(dir string, ext string) ([]byte, error) {
+		entries, err := os.ReadDir(filepath.Join(root, dir))
+		if err != nil {
+			return nil, nil
+		}
+		var names []string
+		for _, e := range entries {
+			if !e.IsDir() && (ext == "" || strings.HasSuffix(e.Name(), ext)) {
+				names = append(names, e.Name())
+			}
+		}
+		sort.Strings(names)
+		var out []byte
+		for _, n := range names {
+			b, err := os.ReadFile(filepath.Join(root, dir, n))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, b...)
+		}
+		return out, nil
+	}
+	amd, err := concat("amd-ucode", ".bin")
+	if err != nil {
+		return nil, err
+	}
+	intel, err := concat("intel-ucode", "")
+	if err != nil {
+		return nil, err
+	}
+	if len(amd) == 0 && len(intel) == 0 {
+		return nil, nil
+	}
+	t := NewTree()
+	if len(amd) > 0 {
+		if err := t.AddFile("kernel/x86/microcode/AuthenticAMD.bin", amd, false); err != nil {
+			return nil, err
+		}
+	}
+	if len(intel) > 0 {
+		if err := t.AddFile("kernel/x86/microcode/GenuineIntel.bin", intel, false); err != nil {
+			return nil, err
+		}
+	}
+	return WriteCpio(t.Entries(), sourceEpoch), nil
 }
 
 // addFiles places the declared [files] entries.

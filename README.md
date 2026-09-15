@@ -70,9 +70,10 @@ the kernel except the subtrees that cannot matter before the root file system is
 in Ubuntu's own initramfs, the console before the passphrase runs on the firmware frame buffer
 the EFI GOP leaves behind, driven by the built-in simpledrm, and the real GPU driver comes with
 the system). The firmware files the selected modules name are placed too (symlinks kept, one
-copy per file). About 3200 modules, 53 MB compressed, plus about 17 MB of firmware, on an
-Ubuntu kernel; `firmware = none` in wisp.conf leaves the firmware out. Blacklists from /etc/modprobe.d are
-honoured. Modules are loaded at boot only when hardware matches, so declaring many costs archive
+copy per file), and the CPU microcode from the amd64-microcode and intel-microcode packages is
+prepended as the uncompressed early cpio the kernel's loader expects. About 3100 modules, 53 MB
+compressed, plus firmware and 22 MB of microcode, on an Ubuntu kernel; `firmware = none` and
+`microcode = none` in wisp.conf leave them out. Blacklists from /etc/modprobe.d are honoured. Modules are loaded at boot only when hardware matches, so declaring many costs archive
 size and early-boot memory, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
