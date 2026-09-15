@@ -18,9 +18,14 @@ import (
 
 // Result is a built initrd.
 type Result struct {
-	Cpio       []byte      // the uncompressed archive
-	Resolution *Resolution // which modules went in
+	Cpio            []byte      // the uncompressed archive
+	Resolution      *Resolution // which modules went in
+	FirmwareFiles   int         // firmware entries placed (files and symlinks)
+	FirmwareMissing []string    // firmware names the modules declare that the firmware root lacks
 }
+
+// FirmwareRoot is where firmware files are taken from when the manifest asks for them.
+var FirmwareRoot = "/lib/firmware"
 
 // SHA256 of the uncompressed archive, hex.
 func (r *Result) SHA256() string {
@@ -76,10 +81,27 @@ func Build(m *Manifest, modulesRoot string) (*Result, error) {
 	if err := t.AddFile(modBase+"/modules.order", order.Bytes(), false); err != nil {
 		return nil, err
 	}
+	result := &Result{Resolution: res}
+	if m.Firmware == "modules" {
+		n, missing, err := addFirmware(t, res.Firmware, FirmwareRoot)
+		if err != nil {
+			return nil, err
+		}
+		result.FirmwareFiles, result.FirmwareMissing = n, missing
+	}
+	if err := addFiles(t, m); err != nil {
+		return nil, err
+	}
+	result.Cpio = WriteCpio(t.Entries(), m.SourceEpoch)
+	return result, nil
+}
+
+// addFiles places the declared [files] entries.
+func addFiles(t *Tree, m *Manifest) error {
 	for _, f := range m.Files {
 		if f.Link != "" {
 			if err := t.AddSymlink(f.Archive, f.Link); err != nil {
-				return nil, fmt.Errorf("build: [files] %s: %w", f.Archive, err)
+				return fmt.Errorf("build: [files] %s: %w", f.Archive, err)
 			}
 			continue
 		}
@@ -89,17 +111,119 @@ func Build(m *Manifest, modulesRoot string) (*Result, error) {
 		}
 		fi, err := os.Stat(src)
 		if err != nil {
-			return nil, fmt.Errorf("build: [files] %s: %w", f.Archive, err)
+			return fmt.Errorf("build: [files] %s: %w", f.Archive, err)
 		}
 		data, err := os.ReadFile(src)
 		if err != nil {
-			return nil, fmt.Errorf("build: [files] %s: %w", f.Archive, err)
+			return fmt.Errorf("build: [files] %s: %w", f.Archive, err)
 		}
 		if err := t.AddFile(f.Archive, data, fi.Mode()&0o111 != 0); err != nil {
-			return nil, fmt.Errorf("build: [files] %s: %w", f.Archive, err)
+			return fmt.Errorf("build: [files] %s: %w", f.Archive, err)
 		}
 	}
-	return &Result{Cpio: WriteCpio(t.Entries(), m.SourceEpoch), Resolution: res}, nil
+	return nil
+}
+
+// addFirmware places the firmware files the modules name, as the kernel's
+// firmware loader will look for them: /lib/firmware/<name>, or the
+// compressed variant <name>.zst or <name>.xz that the distribution ships.
+// Symbolic links are kept as links and their targets added too, so that the
+// many generation-specific names that point at one file cost the archive one
+// copy. Names the firmware root does not have are skipped and reported; the
+// result is a pure function of (module set, firmware tree).
+func addFirmware(t *Tree, names []string, root string) (int, []string, error) {
+	placed := 0
+	var missing []string
+	done := map[string]bool{}
+	// link records a symlink entry once and returns the path it resolves to,
+	// relative to the firmware root.
+	link := func(rel, target string) (string, error) {
+		if !done["link:"+rel] {
+			if err := t.AddSymlink("lib/firmware/"+rel, target); err != nil {
+				return "", err
+			}
+			done["link:"+rel] = true
+			placed++
+		}
+		if strings.HasPrefix(target, "/") {
+			return strings.Trim(strings.TrimPrefix(target, root), "/"), nil
+		}
+		return filepath.ToSlash(filepath.Join(filepath.Dir(rel), target)), nil
+	}
+	var place func(rel string) error
+	place = func(rel string) error {
+		rel = strings.Trim(filepath.ToSlash(rel), "/")
+		// Directory symlinks on the way (nvidia/ga106 -> ga102 and the like): keep
+		// the link, continue under the real directory, so one file serves every name.
+		parts := strings.Split(rel, "/")
+		for i := 1; i < len(parts); i++ {
+			prefix := strings.Join(parts[:i], "/")
+			fi, err := os.Lstat(filepath.Join(root, filepath.FromSlash(prefix)))
+			if err != nil {
+				return err
+			}
+			if fi.Mode()&os.ModeSymlink != 0 {
+				target, err := os.Readlink(filepath.Join(root, filepath.FromSlash(prefix)))
+				if err != nil {
+					return err
+				}
+				resolved, err := link(prefix, target)
+				if err != nil {
+					return err
+				}
+				return place(resolved + "/" + strings.Join(parts[i:], "/"))
+			}
+		}
+		if done[rel] {
+			return nil
+		}
+		done[rel] = true
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		fi, err := os.Lstat(full)
+		if err != nil {
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(full)
+			if err != nil {
+				return err
+			}
+			resolved, err := link(rel, target)
+			if err != nil {
+				return err
+			}
+			return place(resolved)
+		}
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("%s: not a regular file", full)
+		}
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return err
+		}
+		if err := t.AddFile("lib/firmware/"+rel, data, false); err != nil {
+			return err
+		}
+		placed++
+		return nil
+	}
+	for _, name := range names {
+		found := ""
+		for _, cand := range []string{name, name + ".zst", name + ".xz"} {
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(cand))); err == nil {
+				found = cand
+				break
+			}
+		}
+		if found == "" {
+			missing = append(missing, name)
+			continue
+		}
+		if err := place(found); err != nil {
+			return 0, nil, fmt.Errorf("build: firmware %s: %w", name, err)
+		}
+	}
+	return placed, missing, nil
 }
 
 // CompressZstd compresses an archive deterministically: best level, one

@@ -292,3 +292,86 @@ func TestResolveSelectorsAndBuild(t *testing.T) {
 		t.Fatal("unreachable")
 	}
 }
+
+// Firmware placement: names come from the modules' firmware= fields, files
+// are taken from the firmware root with their compressed suffix, symlink
+// chains are kept as links plus one copy of the target, absent names are
+// reported, and the archive is deterministic.
+func TestFirmwarePlacement(t *testing.T) {
+	root := t.TempDir()
+	const ver = "9.9.9-fw"
+	mod := filepath.Join(root, ver)
+	if _, err := exec.LookPath("objcopy"); err != nil {
+		t.Skip("objcopy not installed")
+	}
+	name := "gpu"
+	bin := filepath.Join(root, "modinfo")
+	os.MkdirAll(filepath.Join(mod, "kernel/drivers/gpu"), 0o755)
+	os.WriteFile(bin, []byte("depends=\x00name="+name+"\x00firmware=vendor/a.bin\x00firmware=vendor/b.bin\x00firmware=alias/real.bin\x00firmware=vendor/missing.bin\x00"), 0o644)
+	if out, err := exec.Command("objcopy", "-I", "binary", "-O", "elf64-x86-64", "--rename-section", ".data=.modinfo", bin, filepath.Join(mod, "kernel/drivers/gpu/gpu.ko")).CombinedOutput(); err != nil {
+		t.Fatalf("objcopy: %v: %s", err, out)
+	}
+	fw := filepath.Join(root, "firmware")
+	os.MkdirAll(filepath.Join(fw, "vendor"), 0o755)
+	os.WriteFile(filepath.Join(fw, "vendor/a.bin.zst"), []byte("A-COMPRESSED"), 0o644) // shipped compressed
+	os.WriteFile(filepath.Join(fw, "vendor/real.bin"), []byte("B-REAL"), 0o644)        // the real file
+	os.Symlink("real.bin", filepath.Join(fw, "vendor/b.bin"))                          // b.bin -> real.bin
+	os.Symlink("vendor", filepath.Join(fw, "alias"))                                   // alias/ -> vendor/ (directory symlink)
+	old := FirmwareRoot
+	FirmwareRoot = fw
+	defer func() { FirmwareRoot = old }()
+
+	os.WriteFile(filepath.Join(root, "init"), []byte("#!/bin/sh\n"), 0o755)
+	m, err := ParseManifestString("kernel = "+ver+"\nfirmware = modules\n[modules]\ngpu\n[files]\n/init = init\n", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r1, err := Build(m, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, err := Build(m, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(r1.Cpio, r2.Cpio) {
+		t.Fatal("firmware build not deterministic")
+	}
+	if !reflect.DeepEqual(r1.FirmwareMissing, []string{"vendor/missing.bin"}) || r1.FirmwareFiles != 4 {
+		t.Fatalf("placed %d, missing %v", r1.FirmwareFiles, r1.FirmwareMissing)
+	}
+	got := map[string]member{}
+	for _, x := range readCpio(t, r1.Cpio) {
+		got[x.name] = x
+	}
+	if x, ok := got["lib/firmware/vendor/a.bin.zst"]; !ok || string(x.data) != "A-COMPRESSED" {
+		t.Fatalf("compressed firmware missing: %+v", x)
+	}
+	if x, ok := got["lib/firmware/vendor/b.bin"]; !ok || x.mode&0o170000 != modeLink || string(x.data) != "real.bin" {
+		t.Fatalf("symlink not kept: %+v", x)
+	}
+	if x, ok := got["lib/firmware/vendor/real.bin"]; !ok || string(x.data) != "B-REAL" {
+		t.Fatalf("symlink target missing: %+v", x)
+	}
+	if _, ok := got["lib/firmware/vendor/missing.bin"]; ok {
+		t.Fatal("absent firmware appeared")
+	}
+	if x, ok := got["lib/firmware/alias"]; !ok || x.mode&0o170000 != modeLink || string(x.data) != "vendor" {
+		t.Fatalf("directory symlink not kept: %+v", x)
+	}
+	if _, ok := got["lib/firmware/alias/real.bin"]; ok {
+		t.Fatal("file duplicated under the directory symlink instead of shared")
+	}
+	// without the firmware key nothing is placed
+	m2, _ := ParseManifestString("kernel = "+ver+"\n[modules]\ngpu\n[files]\n/init = init\n", root)
+	r3, err := Build(m2, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r3.FirmwareFiles != 0 || len(r3.Cpio) >= len(r1.Cpio) {
+		t.Fatal("firmware placed without the key")
+	}
+	if _, err := ParseManifestString("kernel = x\nfirmware = maybe\n", root); err == nil {
+		t.Fatal("bad firmware value accepted")
+	}
+}

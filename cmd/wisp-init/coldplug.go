@@ -66,8 +66,9 @@ type aliasEntry struct {
 // modTree is the indexed module tree plus a lazy cache of each module's .modinfo.
 type modTree struct {
 	*kmod.Tree
-	info   map[string]modInfo
-	params map[string]string // module key -> parameters from the kernel command line
+	info      map[string]modInfo
+	params    map[string]string // module key -> parameters from the kernel command line
+	blacklist map[string]bool   // keys never loaded on an alias match (/etc/wisp/modules.blacklist)
 }
 
 func newModTree() *modTree {
@@ -75,8 +76,21 @@ func newModTree() *modTree {
 	unix.Uname(&uts)
 	dir := filepath.Join("/lib/modules", unix.ByteSliceToString(uts.Release[:]))
 	cl, _ := os.ReadFile("/proc/cmdline")
-	return &modTree{Tree: kmod.Load(dir), info: map[string]modInfo{}, params: moduleParams(string(cl))}
+	t := &modTree{Tree: kmod.Load(dir), info: map[string]modInfo{}, params: moduleParams(string(cl)), blacklist: map[string]bool{}}
+	if b, err := os.ReadFile(blacklistPath); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+				t.blacklist[kmod.Key(line)] = true
+			}
+		}
+	}
+	return t
 }
+
+// blacklistPath lists modules the builder found blacklisted in /etc/modprobe.d.
+// As with modprobe, a blacklisted module is skipped on an alias match but
+// still loads as a dependency of something else.
+const blacklistPath = "/etc/wisp/modules.blacklist"
 
 func (t *modTree) infoFor(key string) modInfo {
 	if mi, ok := t.info[key]; ok {
@@ -204,7 +218,7 @@ func (t *modTree) matchRound(con *Console, aliases []aliasEntry, loaded map[stri
 	n := 0
 	for _, ma := range scanModaliases() {
 		for _, ae := range aliases {
-			if !loaded[ae.key] && globMatch(ae.pattern, ma) {
+			if !loaded[ae.key] && !t.blacklist[ae.key] && globMatch(ae.pattern, ma) {
 				n += t.load(con, ae.key, loaded)
 			}
 		}

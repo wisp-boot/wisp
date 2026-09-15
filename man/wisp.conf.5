@@ -58,6 +58,13 @@ The root file system. Taken from the running system when absent.
 .TP
 .BI rootfstype " = " type
 Optional; the type is otherwise probed from the superblock (ext4, xfs, btrfs).
+.TP
+.BI firmware " = modules | none"
+Whether the firmware files named by the selected modules (their
+.B firmware=
+fields) are copied from /lib/firmware into the archive. Symbolic links are
+kept, so the many names that point at one file cost one copy. Default
+.BR modules .
 .SS /etc/wisp/modules
 One entry per line: a module
 .I name
@@ -75,15 +82,22 @@ regardless of line order. Subtrees match whole path components. Cutouts shape
 only the selected set; a dependency that lives in an excluded subtree is still
 pulled in when a selected module needs it. Without this file the selection is, in
 the spirit of initramfs-tools' "most", every module of the kernel except the
-subtrees that cannot matter before the root file system is mounted (the firmware
-frame buffer driver, found by its platform alias in the target kernel, survives the gpu
-exclusion): network,
-sound, GPUs, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
-kheaders module and ZFS. About 3200 modules and 53 MB compressed on an Ubuntu
-kernel.
+subtrees that cannot matter before the root file system is mounted: network,
+sound, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
+kheaders module and ZFS. GPU drivers are included, with their firmware, so
+that the console before the passphrase prompt runs on the same driver as the
+desktop. About 3300 modules, 66 MB compressed, plus about 150 MB of firmware
+on an Ubuntu kernel. Nothing is detected from the running machine.
 .PP
 Modules are loaded at boot only when their alias matches present hardware, so
 declaring many costs archive size, not boot time.
+.SS /etc/modprobe.d
+The
+.B blacklist
+lines of every *.conf there are collected into the archive; as with modprobe,
+a blacklisted module is not loaded on an alias match but still as a
+dependency. Needed for the proprietary NVIDIA driver, whose configuration
+blacklists nouveau.
 .SS /etc/wisp/lvm.tab
 The device-mapper table of the root logical volume, as
 .B dmsetup table

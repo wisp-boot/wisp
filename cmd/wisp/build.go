@@ -40,14 +40,13 @@ const (
 // defaultModules is the selection used when /etc/wisp/modules does not exist,
 // in the spirit of initramfs-tools' "most": every module of the kernel except
 // the subtrees that cannot matter before the root file system is mounted.
-// The coldplug loads only what matches present hardware, so the breadth costs
-// archive size and early-boot memory, not boot time. Exclusions shape the
-// top-level set only; a dependency inside an excluded subtree is still pulled
-// when a selected module needs it, and a bare name is resolved regardless of
-// the directory selectors. The firmware frame buffer driver (the one bound to
-// the "simple-framebuffer" platform device, simpledrm today) is added by
-// name when it is a module, see framebufferModules: it must survive the gpu
-// exclusion, and its name is read from sysfs rather than hard-coded.
+// GPU drivers are included on purpose, with their firmware (see the firmware
+// key), so that the console before the passphrase prompt is driven by the
+// same driver as the desktop, on AMD as well as Intel. The coldplug loads
+// only what matches present hardware, so the breadth costs archive size and
+// early-boot memory, not boot time. Exclusions shape the top-level set only;
+// a dependency inside an excluded subtree is still pulled when a selected
+// module needs it. Nothing is auto-detected from the running machine.
 var defaultModules = []string{
 	"dm_mod",
 	"dm_crypt",
@@ -55,7 +54,6 @@ var defaultModules = []string{
 	"-dir:kernel/net",
 	"-dir:kernel/drivers/net",
 	"-dir:kernel/sound",
-	"-dir:kernel/drivers/gpu",
 	"-dir:kernel/drivers/media",
 	"-dir:kernel/drivers/staging",
 	"-dir:kernel/drivers/infiniband",
@@ -135,8 +133,8 @@ func cmdBuild(args []string) int {
 		d.Close()
 	}
 	sum := sha256.Sum256(blob)
-	fmt.Fprintf(os.Stderr, "%s: %d bytes, kernel %s, %d module(s) + %d builtin, sha256=%s%s\n",
-		o.output, len(blob), m.Kernel, len(res.Resolution.Order), len(res.Resolution.Builtin), hex.EncodeToString(sum[:]), note)
+	fmt.Fprintf(os.Stderr, "%s: %d bytes, kernel %s, %d module(s) + %d builtin, %d firmware entries (%d names absent), sha256=%s%s\n",
+		o.output, len(blob), m.Kernel, len(res.Resolution.Order), len(res.Resolution.Builtin), res.FirmwareFiles, len(res.FirmwareMissing), hex.EncodeToString(sum[:]), note)
 	if o.verbose {
 		for _, rp := range res.Resolution.Order {
 			fmt.Fprintln(os.Stderr, "  "+rp)
@@ -317,7 +315,19 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 		}
 	} else {
 		m.Modules = append(m.Modules, defaultModules...)
-		m.Modules = append(m.Modules, framebufferModules(kernel)...)
+	}
+
+	// 2b. firmware: the files the selected modules name, unless wisp.conf says firmware = none
+	if conf["firmware"] != "none" {
+		m.Firmware = "modules"
+	}
+
+	// 2c. blacklist from /etc/modprobe.d: modules the coldplug must not load on an alias match
+	if bl := readBlacklist("/etc/modprobe.d"); len(bl) > 0 {
+		if err := os.WriteFile(filepath.Join(stage, "modules.blacklist"), []byte(strings.Join(bl, "\n")+"\n"), 0o644); err != nil {
+			return nil, err
+		}
+		m.Files = append(m.Files, initrd.FileSpec{Archive: "/etc/wisp/modules.blacklist", Source: filepath.Join(stage, "modules.blacklist")})
 	}
 
 	// 3. the volume table
@@ -368,56 +378,31 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 	return m, nil
 }
 
-// framebufferModules returns the modules that drive the firmware frame
-// buffer, so that the console is visible before the passphrase prompt even
-// though the gpu subtree is excluded. No driver name is hard-coded: the
-// firmware frame buffer is a platform device with a stable name
-// ("simple-framebuffer", formerly "efi-framebuffer"), and the driver for it
-// is whichever module in the target kernel declares the matching platform
-// alias, exactly the match the coldplug makes at boot. Only the frame buffer
-// subtrees are searched, so the cost is a handful of decompressions. A driver
-// that is built into the kernel has no file and needs nothing. On the running
-// system, the module bound to the device (if any) is taken as well.
-func framebufferModules(kernel string) []string {
-	tree := kmod.Load(filepath.Join(modulesRoot, kernel))
-	var out []string
-	seen := map[string]bool{}
-	add := func(key string) {
-		if key == "" || seen[key] {
-			return
-		}
-		if _, ok := tree.Index[key]; ok {
-			seen[key] = true
-			out = append(out, key)
-		}
-	}
-	devs, _ := filepath.Glob("/sys/bus/platform/devices/*framebuffer*")
-	for _, d := range devs {
-		if mod, err := os.Readlink(filepath.Join(d, "driver", "module")); err == nil {
-			add(kmod.Key(filepath.Base(mod)))
-		}
-	}
-	wanted := map[string]bool{"platform:simple-framebuffer": true, "platform:efi-framebuffer": true}
-	keys := make([]string, 0, len(tree.Index))
-	for k := range tree.Index {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		rel := tree.Index[k]
-		if !strings.HasPrefix(rel, "kernel/drivers/gpu/drm/tiny/") && !strings.HasPrefix(rel, "kernel/drivers/video/fbdev/") {
-			continue
-		}
-		elf, err := kmod.Decompress(tree.Path(k))
+// readBlacklist collects the `blacklist <module>` lines of every *.conf under
+// dir, as modprobe would honour them: such a module is not loaded on an alias
+// match, only as an explicit dependency. Sorted, canonical keys.
+func readBlacklist(dir string) []string {
+	files, _ := filepath.Glob(filepath.Join(dir, "*.conf"))
+	sort.Strings(files)
+	set := map[string]bool{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
 		if err != nil {
 			continue
 		}
-		for _, alias := range kmod.Aliases(elf) {
-			if wanted[alias] {
-				add(k)
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			fs := strings.Fields(line)
+			if len(fs) == 2 && fs[0] == "blacklist" {
+				set[kmod.Key(fs[1])] = true
 			}
 		}
 	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }
 

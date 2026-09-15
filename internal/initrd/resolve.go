@@ -13,9 +13,10 @@ import (
 
 // Resolution is the outcome of Resolve.
 type Resolution struct {
-	Order   []string // module paths relative to the tree, dependency-first, deduplicated
-	Builtin []string // requested names compiled into the kernel (no file)
-	Missing []string // requested names that are neither a module nor builtin
+	Order    []string // module paths relative to the tree, dependency-first, deduplicated
+	Builtin  []string // requested names compiled into the kernel (no file)
+	Missing  []string // requested names that are neither a module nor builtin
+	Firmware []string // firmware file names the emitted modules declare (firmware= in .modinfo), sorted
 }
 
 // Resolve computes the exact set of module files to place in the initrd, in a
@@ -69,6 +70,7 @@ func Resolve(entries []string, tree *kmod.Tree) (*Resolution, error) {
 	}
 
 	depsCache := map[string][]string{}
+	firmware := map[string]bool{}
 	deps := func(key string) ([]string, error) {
 		if d, ok := depsCache[key]; ok {
 			return d, nil
@@ -83,6 +85,9 @@ func Resolve(entries []string, tree *kmod.Tree) (*Resolution, error) {
 		}
 		sort.Strings(out)
 		depsCache[key] = out
+		for _, f := range kmod.Values(elf, "firmware") {
+			firmware[f] = true
+		}
 		return out, nil
 	}
 
@@ -124,6 +129,10 @@ func Resolve(entries []string, tree *kmod.Tree) (*Resolution, error) {
 			return nil, err
 		}
 	}
+	for f := range firmware {
+		res.Firmware = append(res.Firmware, f)
+	}
+	sort.Strings(res.Firmware)
 	return res, nil
 }
 

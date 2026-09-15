@@ -26,3 +26,14 @@ func TestReadCrypttab(t *testing.T) {
 		t.Fatalf("%q", u)
 	}
 }
+
+func TestReadBlacklist(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.conf"), []byte("# comment\nblacklist nouveau\nblacklist snd-pcsp\noptions i915 foo=1\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.conf"), []byte("blacklist nouveau\nblacklist  \n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "ignored.txt"), []byte("blacklist nvme\n"), 0o644)
+	got := readBlacklist(dir)
+	if len(got) != 2 || got[0] != "nouveau" || got[1] != "snd_pcsp" {
+		t.Fatalf("%v", got)
+	}
+}

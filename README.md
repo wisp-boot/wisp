@@ -66,9 +66,13 @@ root       = /dev/mapper/ubuntu--vg-ubuntu--lv
 `/etc/wisp/modules`, module names and directory selectors (`+dir:kernel/drivers/nvme`,
 `-dir:kernel/drivers/usb/gadget`). Without it the selection is, like initramfs-tools' "most", every module of
 the kernel except the subtrees that cannot matter before the root file system is mounted
-(network, sound, GPUs, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS): about
-3200 modules, 53 MB compressed on an Ubuntu kernel. Modules are loaded at boot only when hardware
-matches, so declaring many costs archive size and early-boot memory, not time.
+(network, sound, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS). GPU drivers
+are included, together with the firmware files they name (symlinks kept, one copy per file), so
+the console before the passphrase runs on the same driver as the desktop, on AMD as on Intel.
+About 3300 modules and 66 MB compressed, plus about 150 MB of firmware, on an Ubuntu kernel;
+`firmware = none` in wisp.conf leaves the firmware out. Blacklists from /etc/modprobe.d are
+honoured. Modules are loaded at boot only when hardware matches, so declaring many costs archive
+size and early-boot memory, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
 running system when absent. Rebuild the initramfs after resizing the root volume.

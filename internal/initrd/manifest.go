@@ -16,6 +16,8 @@ import (
 //
 //	kernel        = 6.8.0-45-generic     the module tree /lib/modules/<kernel>
 //	source_epoch  = 0                    the mtime stamped on every entry
+//	firmware      = modules              copy the firmware files the selected modules name
+//	                                     (from /lib/firmware, symlinks kept); absent: no firmware
 //
 //	[modules]                            module names and/or directory selectors
 //	nvme                                   a name (dependencies are resolved)
@@ -33,6 +35,7 @@ import (
 type Manifest struct {
 	Kernel      string
 	SourceEpoch int64
+	Firmware    string // "" (none) or "modules"
 	Modules     []string
 	Cmdline     []string
 	Files       []FileSpec
@@ -101,6 +104,14 @@ func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 					return nil, fmt.Errorf("source_epoch %q: %w", v, err)
 				}
 				m.SourceEpoch = n
+			case "firmware":
+				if v != "modules" && v != "none" && v != "" {
+					return nil, fmt.Errorf("firmware = %q: expected modules or none", v)
+				}
+				if v == "none" {
+					v = ""
+				}
+				m.Firmware = v
 			}
 		case "modules":
 			m.Modules = append(m.Modules, s)
@@ -145,6 +156,9 @@ func (m *Manifest) CmdlineString() string {
 func (m *Manifest) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "kernel        = %s\nsource_epoch  = %d\n", m.Kernel, m.SourceEpoch)
+	if m.Firmware != "" {
+		fmt.Fprintf(&b, "firmware      = %s\n", m.Firmware)
+	}
 	if len(m.Modules) > 0 {
 		b.WriteString("\n[modules]\n")
 		for _, x := range m.Modules {
