@@ -84,10 +84,11 @@ pulled in when a selected module needs it. Without this file the selection is, i
 the spirit of initramfs-tools' "most", every module of the kernel except the
 subtrees that cannot matter before the root file system is mounted: network,
 sound, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
-kheaders module and ZFS. GPU drivers are included, with their firmware, so
-that the console before the passphrase prompt runs on the same driver as the
-desktop. About 3300 modules, 66 MB compressed, plus about 150 MB of firmware
-on an Ubuntu kernel. Nothing is detected from the running machine.
+kheaders module and ZFS, and GPUs: as in Ubuntu's own initramfs the console
+before the passphrase prompt runs on the firmware frame buffer (built-in
+simpledrm), and the real GPU driver comes with the system. About 3200
+modules, 53 MB compressed, plus the firmware the selected modules name
+(about 17 MB) on an Ubuntu kernel. Nothing is detected from the running machine.
 .PP
 Modules are loaded at boot only when their alias matches present hardware, so
 declaring many costs archive size, not boot time.

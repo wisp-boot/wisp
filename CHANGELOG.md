@@ -11,10 +11,11 @@ First release.
   (protocol 1). Kernel command-line module parameters are passed to finit_module as
   modprobe would. Halts on failure, no shell.
 - Default module selection like initramfs-tools' "most": every module except network, sound,
-  media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders and ZFS; GPU drivers included.
+  media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS and GPUs (the console before
+  the passphrase runs on the firmware frame buffer, as in Ubuntu's own initramfs).
 - Firmware: the files named by the selected modules are placed under /lib/firmware in the
   archive (`firmware = modules`, the default), symlinks kept so each file is stored once.
-  About 216 MB for the default selection on an Ubuntu kernel.
+  About 70 MB for the default selection on an Ubuntu kernel.
 - Blacklists from /etc/modprobe.d are honoured by the coldplug (alias matches only).
 - `wisp`: manifest assembly from `/etc/wisp` and `/etc/crypttab`, deterministic newc cpio,
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`

@@ -40,9 +40,11 @@ const (
 // defaultModules is the selection used when /etc/wisp/modules does not exist,
 // in the spirit of initramfs-tools' "most": every module of the kernel except
 // the subtrees that cannot matter before the root file system is mounted.
-// GPU drivers are included on purpose, with their firmware (see the firmware
-// key), so that the console before the passphrase prompt is driven by the
-// same driver as the desktop, on AMD as well as Intel. The coldplug loads
+// GPU drivers stay out, as in Ubuntu's own initramfs: before the root file
+// system is mounted the console runs on the firmware frame buffer the EFI
+// GOP leaves behind, driven by the built-in simpledrm, and the real GPU
+// driver comes with the system. Firmware files for the selected modules are
+// still placed (see the firmware key). The coldplug loads
 // only what matches present hardware, so the breadth costs archive size and
 // early-boot memory, not boot time. Exclusions shape the top-level set only;
 // a dependency inside an excluded subtree is still pulled when a selected
@@ -54,6 +56,7 @@ var defaultModules = []string{
 	"-dir:kernel/net",
 	"-dir:kernel/drivers/net",
 	"-dir:kernel/sound",
+	"-dir:kernel/drivers/gpu",
 	"-dir:kernel/drivers/media",
 	"-dir:kernel/drivers/staging",
 	"-dir:kernel/drivers/infiniband",

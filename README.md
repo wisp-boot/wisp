@@ -66,11 +66,12 @@ root       = /dev/mapper/ubuntu--vg-ubuntu--lv
 `/etc/wisp/modules`, module names and directory selectors (`+dir:kernel/drivers/nvme`,
 `-dir:kernel/drivers/usb/gadget`). Without it the selection is, like initramfs-tools' "most", every module of
 the kernel except the subtrees that cannot matter before the root file system is mounted
-(network, sound, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS). GPU drivers
-are included, together with the firmware files they name (symlinks kept, one copy per file), so
-the console before the passphrase runs on the same driver as the desktop, on AMD as on Intel.
-About 3300 modules and 66 MB compressed, plus about 150 MB of firmware, on an Ubuntu kernel;
-`firmware = none` in wisp.conf leaves the firmware out. Blacklists from /etc/modprobe.d are
+(network, sound, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS, and GPUs: as
+in Ubuntu's own initramfs, the console before the passphrase runs on the firmware frame buffer
+the EFI GOP leaves behind, driven by the built-in simpledrm, and the real GPU driver comes with
+the system). The firmware files the selected modules name are placed too (symlinks kept, one
+copy per file). About 3200 modules, 53 MB compressed, plus about 17 MB of firmware, on an
+Ubuntu kernel; `firmware = none` in wisp.conf leaves the firmware out. Blacklists from /etc/modprobe.d are
 honoured. Modules are loaded at boot only when hardware matches, so declaring many costs archive
 size and early-boot memory, not time.
 
