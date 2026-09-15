@@ -44,13 +44,13 @@ const (
 // archive size and early-boot memory, not boot time. Exclusions shape the
 // top-level set only; a dependency inside an excluded subtree is still pulled
 // when a selected module needs it, and a bare name is resolved regardless of
-// the directory selectors: that is how the firmware frame buffer driver
-// survives the gpu exclusion on kernels that build it as a module (Ubuntu
-// builds it in, then the name is a no-op).
+// the directory selectors. The firmware frame buffer driver (the one bound to
+// the "simple-framebuffer" platform device, simpledrm today) is added by
+// name when it is a module, see framebufferModules: it must survive the gpu
+// exclusion, and its name is read from sysfs rather than hard-coded.
 var defaultModules = []string{
 	"dm_mod",
 	"dm_crypt",
-	"simpledrm",
 	"+dir:kernel",
 	"-dir:kernel/net",
 	"-dir:kernel/drivers/net",
@@ -317,6 +317,7 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 		}
 	} else {
 		m.Modules = append(m.Modules, defaultModules...)
+		m.Modules = append(m.Modules, framebufferModules(kernel)...)
 	}
 
 	// 3. the volume table
@@ -365,6 +366,59 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 		}
 	}
 	return m, nil
+}
+
+// framebufferModules returns the modules that drive the firmware frame
+// buffer, so that the console is visible before the passphrase prompt even
+// though the gpu subtree is excluded. No driver name is hard-coded: the
+// firmware frame buffer is a platform device with a stable name
+// ("simple-framebuffer", formerly "efi-framebuffer"), and the driver for it
+// is whichever module in the target kernel declares the matching platform
+// alias, exactly the match the coldplug makes at boot. Only the frame buffer
+// subtrees are searched, so the cost is a handful of decompressions. A driver
+// that is built into the kernel has no file and needs nothing. On the running
+// system, the module bound to the device (if any) is taken as well.
+func framebufferModules(kernel string) []string {
+	tree := kmod.Load(filepath.Join(modulesRoot, kernel))
+	var out []string
+	seen := map[string]bool{}
+	add := func(key string) {
+		if key == "" || seen[key] {
+			return
+		}
+		if _, ok := tree.Index[key]; ok {
+			seen[key] = true
+			out = append(out, key)
+		}
+	}
+	devs, _ := filepath.Glob("/sys/bus/platform/devices/*framebuffer*")
+	for _, d := range devs {
+		if mod, err := os.Readlink(filepath.Join(d, "driver", "module")); err == nil {
+			add(kmod.Key(filepath.Base(mod)))
+		}
+	}
+	wanted := map[string]bool{"platform:simple-framebuffer": true, "platform:efi-framebuffer": true}
+	keys := make([]string, 0, len(tree.Index))
+	for k := range tree.Index {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		rel := tree.Index[k]
+		if !strings.HasPrefix(rel, "kernel/drivers/gpu/drm/tiny/") && !strings.HasPrefix(rel, "kernel/drivers/video/fbdev/") {
+			continue
+		}
+		elf, err := kmod.Decompress(tree.Path(k))
+		if err != nil {
+			continue
+		}
+		for _, alias := range kmod.Aliases(elf) {
+			if wanted[alias] {
+				add(k)
+			}
+		}
+	}
+	return out
 }
 
 // parseConf reads key=value lines, keeping the first-seen order of the keys.
