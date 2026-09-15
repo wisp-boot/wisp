@@ -13,3 +13,6 @@ First release.
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`
   facade, kernel hooks.
 - Debian package replacing initramfs-tools (`Provides: linux-initramfs-tool`).
+- Hermetic build: ubuntu:24.04 pinned by digest
+  `sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254`, apt snapshot
+  `20260914T000000Z` (golang-go 2:1.22~2build1).
