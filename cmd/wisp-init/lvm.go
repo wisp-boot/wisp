@@ -37,21 +37,23 @@ func activateVolumes(con *Console, cryptName string) {
 	if err != nil {
 		halt(con, "volumes: dm-crypt device %q not found: %v", cryptName, err)
 	}
-	name, targets, err := parseLvmTab(string(tab), cryptDevno)
+	name, uuid, targets, err := parseLvmTab(string(tab), cryptDevno)
 	if err != nil {
 		halt(con, "volumes: %s: %v", lvmTabPath, err)
 	}
-	if err := luks.MapTable(name, "", targets); err != nil {
+	if err := luks.MapTable(name, uuid, targets); err != nil {
 		halt(con, "volumes: mapping %q: %v", name, err)
 	}
 	con.Say("wisp-init: volume %s mapped over dm-crypt %s (%d segment(s))", name, cryptDevno, len(targets))
 	mapperNodes(con)
 }
 
-// parseLvmTab reads lvm.tab: one `name <dmname>` line and one
-// `start length type params...` line per segment (512-byte sectors, as
-// `dmsetup table` prints). Every @crypt@ in the params becomes cryptDevno.
-func parseLvmTab(s, cryptDevno string) (name string, targets []luks.Target, err error) {
+// parseLvmTab reads lvm.tab: one `name <dmname>` line, an optional
+// `uuid <dm uuid>` line (so that lvm2 in the booted system recognises the
+// device as its own), and one `start length type params...` line per
+// segment (512-byte sectors, as `dmsetup table` prints). Every @crypt@ in
+// the params becomes cryptDevno.
+func parseLvmTab(s, cryptDevno string) (name, uuid string, targets []luks.Target, err error) {
 	for _, line := range strings.Split(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -61,28 +63,32 @@ func parseLvmTab(s, cryptDevno string) (name string, targets []luks.Target, err 
 			name = strings.TrimSpace(rest)
 			continue
 		}
+		if rest, ok := strings.CutPrefix(line, "uuid "); ok {
+			uuid = strings.TrimSpace(rest)
+			continue
+		}
 		f := strings.Fields(line)
 		if len(f) < 4 {
-			return "", nil, fmt.Errorf("segment line too short: %q", line)
+			return "", "", nil, fmt.Errorf("segment line too short: %q", line)
 		}
 		start, err := strconv.ParseUint(f[0], 10, 64)
 		if err != nil {
-			return "", nil, fmt.Errorf("start %q: %w", f[0], err)
+			return "", "", nil, fmt.Errorf("start %q: %w", f[0], err)
 		}
 		length, err := strconv.ParseUint(f[1], 10, 64)
 		if err != nil {
-			return "", nil, fmt.Errorf("length %q: %w", f[1], err)
+			return "", "", nil, fmt.Errorf("length %q: %w", f[1], err)
 		}
 		params := strings.ReplaceAll(strings.Join(f[3:], " "), "@crypt@", cryptDevno)
 		targets = append(targets, luks.Target{Start: start, Length: length, Type: f[2], Params: params})
 	}
 	if name == "" {
-		return "", nil, fmt.Errorf("no name line")
+		return "", "", nil, fmt.Errorf("no name line")
 	}
 	if len(targets) == 0 {
-		return "", nil, fmt.Errorf("no segments")
+		return "", "", nil, fmt.Errorf("no segments")
 	}
-	return name, targets, nil
+	return name, uuid, targets, nil
 }
 
 // dmDevno returns "major:minor" of the dm device with this name, from sysfs.

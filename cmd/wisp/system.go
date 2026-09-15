@@ -167,6 +167,6 @@ func inspectRoot() (*rootLayout, error) {
 	}
 	lay.crypt = crypt
 	lay.lvName = info.name
-	lay.lvmTab = "# recorded by wisp build: device-mapper table of the root LV; @crypt@ = the dm-crypt device at boot\nname " + info.name + "\n" + strings.Join(lines, "\n") + "\n"
+	lay.lvmTab = "# recorded by wisp build: device-mapper table of the root LV; @crypt@ = the dm-crypt device at boot\nname " + info.name + "\nuuid " + info.uuid + "\n" + strings.Join(lines, "\n") + "\n"
 	return lay, nil
 }

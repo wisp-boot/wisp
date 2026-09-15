@@ -84,10 +84,12 @@ declaring many costs archive size, not boot time.
 The device-mapper table of the root logical volume, as
 .B dmsetup table
 prints it, with the backing device replaced by
-.BR @crypt@ :
+.BR @crypt@ ,
+and optionally the device-mapper UUID so that lvm2 recognises the device:
 .PP
 .nf
     name ubuntu--vg-ubuntu--lv
+    uuid LVM-iv3wXCsV3yUB7wsXDyWJuufKHhl2eUQkTKFRwz3pnt4DBUAqdWTe5wX2jRlrkBh0
     0 77328384 linear @crypt@ 2048
 .fi
 .PP
