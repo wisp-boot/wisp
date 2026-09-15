@@ -43,12 +43,15 @@ const (
 // The coldplug loads only what matches present hardware, so the breadth costs
 // archive size and early-boot memory, not boot time. Exclusions shape the
 // top-level set only; a dependency inside an excluded subtree is still pulled
-// when a selected module needs it. Note that on kernels where the simple
-// frame buffer driver is a module (drivers/gpu/drm/tiny/simpledrm), the gpu
-// exclusion would drop it; Ubuntu builds it in.
+// when a selected module needs it, and a bare name is resolved regardless of
+// the directory selectors: that is how the firmware frame buffer driver
+// survives the gpu exclusion on kernels that build it as a module (Ubuntu
+// builds it in, then the name is a no-op).
 var defaultModules = []string{
 	"dm_mod",
 	"dm_crypt",
+	"simpledrm",
+	"efifb",
 	"+dir:kernel",
 	"-dir:kernel/net",
 	"-dir:kernel/drivers/net",

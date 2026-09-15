@@ -75,7 +75,9 @@ regardless of line order. Subtrees match whole path components. Cutouts shape
 only the selected set; a dependency that lives in an excluded subtree is still
 pulled in when a selected module needs it. Without this file the selection is, in
 the spirit of initramfs-tools' "most", every module of the kernel except the
-subtrees that cannot matter before the root file system is mounted: network,
+subtrees that cannot matter before the root file system is mounted (the firmware
+frame buffer driver simpledrm, or efifb, is named explicitly and survives the gpu
+exclusion): network,
 sound, GPUs, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
 kheaders module and ZFS. About 3200 modules and 53 MB compressed on an Ubuntu
 kernel.
