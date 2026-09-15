@@ -64,10 +64,11 @@ root       = /dev/mapper/ubuntu--vg-ubuntu--lv
 ```
 
 `/etc/wisp/modules`, module names and directory selectors (`+dir:kernel/drivers/nvme`,
-`-dir:kernel/drivers/usb/gadget`). Without it a broad laptop-oriented selection is used, about
-26 MB compressed on an Ubuntu kernel (storage, input and the buses between them, including
-Thunderbolt docks and SPI keyboards; no network, sound, media or GPUs beyond the simple frame buffer). Modules are loaded at boot only when hardware matches, so
-declaring many costs size, not time.
+`-dir:kernel/drivers/usb/gadget`). Without it the selection is, like initramfs-tools' "most", every module of
+the kernel except the subtrees that cannot matter before the root file system is mounted
+(network, sound, GPUs, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS): about
+3200 modules, 53 MB compressed on an Ubuntu kernel. Modules are loaded at boot only when hardware
+matches, so declaring many costs archive size and early-boot memory, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
 running system when absent. Rebuild the initramfs after resizing the root volume.

@@ -73,13 +73,12 @@ removes a subtree again and wins over
 .B +dir
 regardless of line order. Subtrees match whole path components. Cutouts shape
 only the selected set; a dependency that lives in an excluded subtree is still
-pulled in when a selected module needs it. Without this file a broad built-in
-selection is used: storage (NVMe, ATA, SCSI, block, MMC, UFS, MD, virtio) and
-the buses that reach it (USB without gadget, Thunderbolt, PCI, PHY); input
-(HID, input, I2C, SPI, pin controllers, GPIO, MFD, platform, ACPI); the TPM,
-the simple frame buffer driver, crypto, lib, ext4, xfs, btrfs, and the
-device-mapper modules. Left out: network, sound, media, Bluetooth, GPUs
-beyond the simple frame buffer, staging, InfiniBand.
+pulled in when a selected module needs it. Without this file the selection is, in
+the spirit of initramfs-tools' "most", every module of the kernel except the
+subtrees that cannot matter before the root file system is mounted: network,
+sound, GPUs, media, staging, InfiniBand, Bluetooth, IIO sensors, hwmon, the
+kheaders module and ZFS. About 3200 modules and 53 MB compressed on an Ubuntu
+kernel.
 .PP
 Modules are loaded at boot only when their alias matches present hardware, so
 declaring many costs archive size, not boot time.

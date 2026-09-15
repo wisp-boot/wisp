@@ -10,9 +10,9 @@ First release.
   path, switch_root. Key sources: none, passphrase, credential, external key provider
   (protocol 1). Kernel command-line module parameters are passed to finit_module as
   modprobe would. Halts on failure, no shell.
-- Default module selection covers the buses between the machine and its disk and keyboard as well:
-  Thunderbolt, PCI, PHY, UFS, SPI, pin controllers, GPIO, MFD, platform, ACPI (about 1600
-  modules, 26 MB compressed on an Ubuntu kernel).
+- Default module selection like initramfs-tools' "most": every module except network, sound,
+  GPUs, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders and ZFS (about 3200 modules,
+  53 MB compressed on an Ubuntu kernel).
 - `wisp`: manifest assembly from `/etc/wisp` and `/etc/crypttab`, deterministic newc cpio,
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`
   facade, kernel hooks.
