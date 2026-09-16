@@ -6,27 +6,29 @@ package main
 //
 // wisp.conf `keymap`:
 //
-//	system (default)   the layout configured in /etc/default/keyboard (XKBMODEL,
-//	                   XKBLAYOUT, XKBVARIANT, XKBOPTIONS); no file there: no keymap
-//	none               no keymap, the kernel's built-in US table
-//	<layout>[:<variant>]  an explicit XKB layout, model pc105
+//	system (default)      the layout in /etc/default/keyboard (XKBLAYOUT, XKBVARIANT;
+//	                      the first of a comma-separated list); no file: no keymap
+//	none                  no keymap, the kernel's built-in US table
+//	<layout>[:<variant>]  an explicit XKB layout
 //
-// The layout is compiled by ckbcomp (console-setup) into a console keymap and
-// by `loadkeys -b -u` (kbd) into the binary table wisp-init loads with ioctls;
-// the result is a pure function of the two packages' versions and the layout,
-// so a rebuild gives the same bytes. Like lvm.tab it is data about this
-// machine, staged as keymap.bin and placed at /etc/wisp/keymap.bin.
+// The package ships every XKB layout and variant precompiled under
+// /usr/share/wisp/keymaps (tools/mkkeymaps.sh, run at package build with
+// pinned xkb-data, console-setup and kbd). The builder copies one of them to
+// /etc/wisp/keymap.bin in the initramfs, so the bytes there are a function of
+// the wisp version and the layout name alone: nothing is generated on the
+// machine, and a verifier finds the same file in the wisp package. XKB options
+// and models are not applied.
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 const defaultKeyboard = "/etc/default/keyboard"
+
+var keymapsDir = "/usr/share/wisp/keymaps"
 
 type keyboardConf struct {
 	model, layout, variant, options string
@@ -63,11 +65,26 @@ func parseDefaultKeyboard(s string) keyboardConf {
 	return kc
 }
 
-// stageKeymap resolves the keymap setting and, when a layout results, writes
-// <stage>/keymap.bin. It returns the value to record in wisp.conf and the
-// staged file, both empty when there is no keymap.
-func stageKeymap(setting, stage string) (record, file string, err error) {
-	var kc keyboardConf
+// first returns the first entry of a comma-separated XKB list.
+func first(s string) string {
+	s, _, _ = strings.Cut(s, ",")
+	return strings.TrimSpace(s)
+}
+
+// keymapFile maps a layout[:variant] to its file in the package.
+func keymapFile(layout, variant string) string {
+	name := layout
+	if variant != "" {
+		name += "+" + variant
+	}
+	return filepath.Join(keymapsDir, name+".bkmap")
+}
+
+// resolveKeymap turns the wisp.conf setting into the value to record and the
+// package file to place at /etc/wisp/keymap.bin; both empty when there is no
+// keymap.
+func resolveKeymap(setting string) (record, file string, err error) {
+	var layout, variant string
 	switch setting {
 	case "none":
 		return "", "", nil
@@ -76,59 +93,24 @@ func stageKeymap(setting, stage string) (record, file string, err error) {
 		if err != nil {
 			return "", "", nil // no configured layout: the US table
 		}
-		kc = parseDefaultKeyboard(string(b))
-		if kc.layout == "" {
+		kc := parseDefaultKeyboard(string(b))
+		layout, variant = first(kc.layout), first(kc.variant)
+		if layout == "" {
 			return "", "", nil
 		}
-		record = kc.layout
-		if kc.variant != "" {
-			record += ":" + kc.variant
-		}
 	default:
-		record = setting
-		kc.layout, kc.variant, _ = strings.Cut(setting, ":")
-		kc.model = "pc105"
+		layout, variant, _ = strings.Cut(setting, ":")
 	}
-	for _, bin := range []string{"ckbcomp", "loadkeys"} {
-		if _, err := exec.LookPath(bin); err != nil {
-			return "", "", fmt.Errorf("keymap %s: %s is not installed (console-setup and kbd are needed; keymap = none builds without a layout)", record, bin)
-		}
+	if strings.ContainsAny(layout+variant, "/ \t") {
+		return "", "", fmt.Errorf("keymap: bad layout name %q", setting)
 	}
-	var args []string // UTF-8 is ckbcomp's default; -charmap is for legacy encodings only
-	if kc.model != "" {
-		args = append(args, "-model", kc.model)
+	record = layout
+	if variant != "" {
+		record += ":" + variant
 	}
-	args = append(args, "-layout", kc.layout)
-	if kc.variant != "" {
-		args = append(args, "-variant", kc.variant)
-	}
-	if kc.options != "" {
-		args = append(args, "-option", kc.options)
-	}
-	var stderr bytes.Buffer
-	cmd := exec.Command("ckbcomp", args...)
-	cmd.Stderr = &stderr // warnings about unknown keysyms are normal; shown only on failure
-	txt, err := cmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("keymap %s: ckbcomp: %v\n%s", record, err, stderr.String())
-	}
-	kmap := filepath.Join(stage, "keymap.kmap")
-	if err := os.WriteFile(kmap, txt, 0o644); err != nil {
-		return "", "", err
-	}
-	stderr.Reset()
-	cmd = exec.Command("loadkeys", "-b", "-u", kmap)
-	cmd.Stderr = &stderr
-	bin, err := cmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("keymap %s: loadkeys -b: %v\n%s", record, err, stderr.String())
-	}
-	if !bytes.HasPrefix(bin, []byte("bkeymap")) {
-		return "", "", fmt.Errorf("keymap %s: loadkeys -b did not produce a bkeymap", record)
-	}
-	file = filepath.Join(stage, "keymap.bin")
-	if err := os.WriteFile(file, bin, 0o644); err != nil {
-		return "", "", err
+	file = keymapFile(layout, variant)
+	if _, err := os.Stat(file); err != nil {
+		return "", "", fmt.Errorf("keymap %s: no precompiled layout %s (keymap = none builds without a layout)", record, file)
 	}
 	return record, file, nil
 }

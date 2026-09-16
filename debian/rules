@@ -12,6 +12,7 @@ LDFLAGS := -s -w -buildid= -X main.version=$(VERSION)
 override_dh_auto_build:
 	go build -ldflags "$(LDFLAGS)" -o build/wisp-init ./cmd/wisp-init
 	go build -ldflags "$(LDFLAGS)" -o build/wisp ./cmd/wisp
+	sh tools/mkkeymaps.sh build/keymaps
 
 override_dh_auto_test:
 	go test ./...

@@ -69,12 +69,17 @@ placed and the console keeps the kernel's built-in US table.
 .B none
 places no keymap. A
 .I layout
-names an XKB layout explicitly (model pc105). The builder compiles the layout
-with ckbcomp (console-setup) and loadkeys \-b (kbd) into
+names an XKB layout explicitly. The package ships every XKB layout and variant
+precompiled under
+.IR /usr/share/wisp/keymaps ,
+and the builder copies the one selected to
 /etc/wisp/keymap.bin
 in the initramfs, the binary table the init loads with KDSKBENT before the
-first prompt; the bytes depend only on the layout and the two packages'
-versions. The completed wisp.conf records the layout used.
+first prompt. Nothing is generated on the machine: the bytes are a function
+of the wisp version and the layout name, and a verifier finds the same file in
+the wisp package. XKB options and models are not applied; of a comma-separated
+list only the first layout and variant count. The completed wisp.conf records
+the layout used.
 .TP
 .BI firmware " = modules | none"
 Whether the firmware files named by the selected modules (their

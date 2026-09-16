@@ -50,7 +50,10 @@ or change the microcode files reach the package's trigger handler. All are the `
 binary.
 
 The passphrase prompt uses the keyboard layout from `/etc/default/keyboard`
-(`keymap = system`, the default); `keymap = none` keeps the kernel's US table.
+(`keymap = system`, the default); `keymap = none` keeps the kernel's US table. The
+layouts are precompiled at package build (`tools/mkkeymaps.sh`), one file per XKB
+layout and variant under `/usr/share/wisp/keymaps`, so the initramfs carries a byte
+copy of a package file.
 
 ## Configuration
 

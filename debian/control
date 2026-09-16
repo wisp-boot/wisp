@@ -2,14 +2,14 @@ Source: wisp
 Section: admin
 Priority: optional
 Maintainer: Richard Robert Reitz <reitzrobert77@gmail.com>
-Build-Depends: debhelper-compat (= 13), golang-go (>= 2:1.22~)
+Build-Depends: debhelper-compat (= 13), golang-go (>= 2:1.22~), console-setup, kbd, xkb-data
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: https://github.com/wisp-boot/wisp
 
 Package: wisp
 Architecture: amd64
-Depends: ${misc:Depends}, dmsetup, kbd, console-setup
+Depends: ${misc:Depends}, dmsetup
 Provides: linux-initramfs-tool
 Conflicts: initramfs-tools, dracut
 Description: reproducible pure-Go initramfs for encrypted root file systems

@@ -15,12 +15,12 @@ FROM docker.io/library/ubuntu@sha256:224a1869083a311ef3f13648a154ba79832fbef6364
 ARG APT_SNAPSHOT=20260914T000000Z
 RUN apt-get -o Acquire::Snapshots=${APT_SNAPSHOT} update \
  && apt-get -o Acquire::Snapshots=${APT_SNAPSHOT} install -y --no-install-recommends \
-      debhelper dpkg-dev fakeroot golang-go \
+      build-essential debhelper dpkg-dev fakeroot golang-go console-setup kbd xkb-data \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . /src
 # The build is offline: dependencies are vendored (GOFLAGS=-mod=vendor in debian/rules).
 CMD dpkg-buildpackage -us -uc -b \
  && mkdir -p /out && cp /wisp_*.deb /out/ \
- && dpkg-query -W golang-go debhelper dpkg-dev > /out/toolchain.txt \
+ && dpkg-query -W golang-go debhelper dpkg-dev console-setup kbd xkb-data > /out/toolchain.txt \
  && cd /out && sha256sum wisp_*.deb > SHA256SUMS && cat SHA256SUMS toolchain.txt

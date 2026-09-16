@@ -3,49 +3,47 @@
 package main
 
 import (
-	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
 func TestParseDefaultKeyboard(t *testing.T) {
-	kc := parseDefaultKeyboard("# KEYBOARD CONFIGURATION FILE\n\nXKBMODEL=\"pc105\"\nXKBLAYOUT=\"de\"\nXKBVARIANT=\"nodeadkeys\"\nXKBOPTIONS=''\n\nBACKSPACE=\"guess\"\n")
-	if kc.model != "pc105" || kc.layout != "de" || kc.variant != "nodeadkeys" || kc.options != "" {
+	kc := parseDefaultKeyboard("# KEYBOARD CONFIGURATION FILE\n\nXKBMODEL=\"pc105\"\nXKBLAYOUT=\"de,us\"\nXKBVARIANT=\"nodeadkeys,\"\nXKBOPTIONS=''\n\nBACKSPACE=\"guess\"\n")
+	if kc.model != "pc105" || kc.layout != "de,us" || kc.variant != "nodeadkeys," || kc.options != "" {
 		t.Fatalf("%+v", kc)
+	}
+	if first(kc.layout) != "de" || first(kc.variant) != "nodeadkeys" || first("") != "" {
+		t.Fatal("first")
 	}
 }
 
-func TestStageKeymapNone(t *testing.T) {
-	rec, file, err := stageKeymap("none", t.TempDir())
+func TestResolveKeymap(t *testing.T) {
+	dir := t.TempDir()
+	old := keymapsDir
+	keymapsDir = dir
+	defer func() { keymapsDir = old }()
+	for _, n := range []string{"de.bkmap", "de+nodeadkeys.bkmap"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("bkeymap"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec, file, err := resolveKeymap("none")
 	if err != nil || rec != "" || file != "" {
 		t.Fatalf("none: %q %q %v", rec, file, err)
 	}
-}
-
-func TestStageKeymapDe(t *testing.T) {
-	for _, bin := range []string{"ckbcomp", "loadkeys"} {
-		if _, err := exec.LookPath(bin); err != nil {
-			t.Skipf("%s not installed", bin)
-		}
+	rec, file, err = resolveKeymap("de")
+	if err != nil || rec != "de" || file != filepath.Join(dir, "de.bkmap") {
+		t.Fatalf("de: %q %q %v", rec, file, err)
 	}
-	dir := t.TempDir()
-	rec, file, err := stageKeymap("de", dir)
-	if err != nil {
-		t.Fatal(err)
+	rec, file, err = resolveKeymap("de:nodeadkeys")
+	if err != nil || rec != "de:nodeadkeys" || file != filepath.Join(dir, "de+nodeadkeys.bkmap") {
+		t.Fatalf("de:nodeadkeys: %q %q %v", rec, file, err)
 	}
-	if rec != "de" || file != filepath.Join(dir, "keymap.bin") {
-		t.Fatalf("rec=%q file=%q", rec, file)
+	if _, _, err := resolveKeymap("xx"); err == nil {
+		t.Fatal("unknown layout accepted")
 	}
-	a, _ := os.ReadFile(file)
-	rec2, file2, err := stageKeymap("de", t.TempDir())
-	if err != nil || rec2 != "de" {
-		t.Fatal(err)
+	if _, _, err := resolveKeymap("../etc"); err == nil {
+		t.Fatal("bad name accepted")
 	}
-	b, _ := os.ReadFile(file2)
-	if !bytes.HasPrefix(a, []byte("bkeymap")) || len(a) <= 263 || !bytes.Equal(a, b) {
-		t.Fatalf("keymap.bin: %d bytes, deterministic=%v", len(a), bytes.Equal(a, b))
-	}
-	t.Logf("de: %d bytes", len(a))
 }

@@ -17,9 +17,11 @@ First release.
   archive (`firmware = modules`, the default), symlinks kept so each file is stored once.
   About 78 MB for the default selection on an Ubuntu kernel, microcode included.
 - Blacklists from /etc/modprobe.d are honoured by the coldplug (alias matches only).
-- Console keyboard layout: the builder compiles the layout from /etc/default/keyboard
-  (ckbcomp, loadkeys -b -u) into /etc/wisp/keymap.bin; the init loads it with KDSKBENT
-  before the first prompt (`keymap = system | none | <layout>[:<variant>]`).
+- Console keyboard layout: every XKB layout and variant is precompiled at package build
+  (ckbcomp, loadkeys -b -u; tools/mkkeymaps.sh) into /usr/share/wisp/keymaps; the builder
+  copies the system's layout (/etc/default/keyboard) to /etc/wisp/keymap.bin and the init
+  loads it with KDSKBENT before the first prompt (`keymap = system | none |
+  <layout>[:<variant>]`). The file in the initramfs is a byte copy of a package file.
 - The package listens to the `update-initramfs` dpkg trigger and to the microcode
   directories, so firmware and microcode updates rebuild the initramfs as with
   initramfs-tools.

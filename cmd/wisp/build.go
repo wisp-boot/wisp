@@ -303,8 +303,8 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 		set("root", lay.device)
 	}
 	// 1b. the console keymap: from wisp.conf (keymap = system | none | <layout>[:<variant>]),
-	//     by default the layout in /etc/default/keyboard, as a binary keymap file
-	keymapRec, keymapFile, err := stageKeymap(conf["keymap"], stage)
+	//     by default the layout in /etc/default/keyboard; one of the package's precompiled files
+	keymapRec, keymapFile, err := resolveKeymap(conf["keymap"])
 	if err != nil {
 		return nil, err
 	}
