@@ -17,6 +17,12 @@ First release.
   archive (`firmware = modules`, the default), symlinks kept so each file is stored once.
   About 78 MB for the default selection on an Ubuntu kernel, microcode included.
 - Blacklists from /etc/modprobe.d are honoured by the coldplug (alias matches only).
+- Console keyboard layout: the builder compiles the layout from /etc/default/keyboard
+  (ckbcomp, loadkeys -b -u) into /etc/wisp/keymap.bin; the init loads it with KDSKBENT
+  before the first prompt (`keymap = system | none | <layout>[:<variant>]`).
+- The package listens to the `update-initramfs` dpkg trigger and to the microcode
+  directories, so firmware and microcode updates rebuild the initramfs as with
+  initramfs-tools.
 - CPU microcode (`microcode = all`, the default): the amd64-microcode and intel-microcode files
   concatenated into the uncompressed early cpio the kernel's early loader reads, prepended to
   the archive. No selection tool; a pure function of the two packages.

@@ -59,6 +59,23 @@ The root file system. Taken from the running system when absent.
 .BI rootfstype " = " type
 Optional; the type is otherwise probed from the superblock (ext4, xfs, btrfs).
 .TP
+.BI keymap " = system | none | " layout [: variant ]
+The console keyboard layout for the passphrase and provider prompts.
+.B system
+(the default) takes the layout from
+.I /etc/default/keyboard
+(XKBMODEL, XKBLAYOUT, XKBVARIANT, XKBOPTIONS); without that file no keymap is
+placed and the console keeps the kernel's built-in US table.
+.B none
+places no keymap. A
+.I layout
+names an XKB layout explicitly (model pc105). The builder compiles the layout
+with ckbcomp (console-setup) and loadkeys \-b (kbd) into
+/etc/wisp/keymap.bin
+in the initramfs, the binary table the init loads with KDSKBENT before the
+first prompt; the bytes depend only on the layout and the two packages'
+versions. The completed wisp.conf records the layout used.
+.TP
 .BI firmware " = modules | none"
 Whether the firmware files named by the selected modules (their
 .B firmware=

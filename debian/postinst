@@ -17,5 +17,12 @@ configure)
 		fi
 	fi
 	;;
+triggered)
+	# a package that changes what the initramfs holds asked for a rebuild
+	# (see debian/triggers): the newest kernel, as update-initramfs -u does
+	if [ -z "$WISP_NO_BUILD" ]; then
+		wisp update-initramfs -u
+	fi
+	;;
 esac
 #DEBHELPER#

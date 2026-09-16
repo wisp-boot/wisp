@@ -9,7 +9,7 @@ Homepage: https://github.com/wisp-boot/wisp
 
 Package: wisp
 Architecture: amd64
-Depends: ${misc:Depends}, dmsetup
+Depends: ${misc:Depends}, dmsetup, kbd, console-setup
 Provides: linux-initramfs-tool
 Conflicts: initramfs-tools, dracut
 Description: reproducible pure-Go initramfs for encrypted root file systems

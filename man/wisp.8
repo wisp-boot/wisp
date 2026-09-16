@@ -43,6 +43,13 @@ The same binary is installed as
 and as the kernel maintainer hooks under
 .IR /etc/kernel/postinst.d " and " /etc/kernel/postrm.d ,
 so kernel packages and other software keep working as with initramfs-tools.
+The package also listens to the dpkg trigger
+.B update-initramfs
+that linux-firmware, kmod, udev, cryptsetup, lvm2 and others activate, and to
+file changes under the microcode directories of /lib/firmware; each rebuilds
+the newest kernel's initramfs as
+.B update-initramfs -u
+does.
 .SH VERBS
 .TP
 .B build

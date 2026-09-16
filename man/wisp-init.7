@@ -8,6 +8,12 @@ mounted, root encrypted" to "the real operating system runs on the decrypted
 root". It has no shell, no udev, no cryptsetup and no lvm2 inside. Seven steps:
 .IP 1. 4
 Mount proc, sysfs, devtmpfs and a tmpfs on /run.
+.IP 1b. 4
+Loads the console keyboard layout from
+.IR /etc/wisp/keymap.bin ,
+when the builder placed one (see
+.BR wisp.conf (5)),
+so the passphrase is typed in the system's layout.
 .IP 2. 4
 Coldplug: read every
 .I modalias

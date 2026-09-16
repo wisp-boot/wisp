@@ -12,6 +12,7 @@ package main
 //	luks.header = <path>            optional detached header copy inside the initrd
 //	root        = <device|UUID=x>   the root file system (else from the kernel command line)
 //	rootfstype  = <type>            optional; else probed from the superblock
+//	keymap      = <layout>          informational: the builder placed /etc/wisp/keymap.bin for it
 //
 // Lines are key=value, '#' starts a comment, whitespace is trimmed, unknown keys
 // are ignored (an unknown key never stops a boot). The kernel command line is

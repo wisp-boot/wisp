@@ -44,7 +44,13 @@ in the boot menu, then `apt install initramfs-tools` (which removes wisp) and
 `update-initramfs -u`.
 
 Kernel updates call the hook under `/etc/kernel/postinst.d`, packages that call
-`update-initramfs` reach the compatible facade. Both are the `wisp` binary.
+`update-initramfs` reach the compatible facade, and packages that activate the
+`update-initramfs` dpkg trigger (linux-firmware, kmod, udev, cryptsetup, lvm2, ...)
+or change the microcode files reach the package's trigger handler. All are the `wisp`
+binary.
+
+The passphrase prompt uses the keyboard layout from `/etc/default/keyboard`
+(`keymap = system`, the default); `keymap = none` keeps the kernel's US table.
 
 ## Configuration
 

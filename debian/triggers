@@ -1,0 +1,8 @@
+# A package that changes what the initramfs holds asks for a rebuild the way
+# it asks initramfs-tools: the named trigger (linux-firmware, kmod, udev,
+# cryptsetup, lvm2, ...) or files under the microcode directories.
+interest-noawait update-initramfs
+interest-noawait /lib/firmware/amd-ucode
+interest-noawait /lib/firmware/intel-ucode
+interest-noawait /usr/lib/firmware/amd-ucode
+interest-noawait /usr/lib/firmware/intel-ucode

@@ -5,6 +5,7 @@
 // operating system runs on the decrypted root". Seven steps, each a function:
 //
 //  1. mount the pseudo file systems      proc, sysfs, devtmpfs, a tmpfs on /run
+//     1b. console keymap                   the system's layout from the measured keymap.bin, if any
 //  2. load modules                        coldplug: only modules whose alias= matches present hardware
 //  3. find the LUKS container             wait for the device with the configured UUID
 //  4. obtain the key                      none | passphrase | credential | a key provider process
@@ -47,6 +48,7 @@ func main() {
 	mountPseudoFS()                                    // 1
 	con := openConsole()
 	cfg := loadConfig(con) // measured wisp.conf first, kernel command line as fallback
+	applyKeymap(con)       // 1b: before any prompt
 	con.Say("=== wisp-init %s, kernel %s, key=%s ===", version, kernelRelease(), cfg.key)
 
 	coldplug(con, cfg) // 2
