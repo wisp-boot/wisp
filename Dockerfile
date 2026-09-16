@@ -13,7 +13,19 @@
 # (YYYYMMDDTHHMMSSZ) and record both in CHANGELOG.md with the release.
 FROM docker.io/library/ubuntu@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
 ARG APT_SNAPSHOT=20260914T000000Z
+# console-setup's postinst configures a console; in a container it needs its
+# debconf answers preseeded (only ckbcomp and xkb-data are used, see tools/mkkeymaps.sh).
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -o Acquire::Snapshots=${APT_SNAPSHOT} update \
+ && printf '%s\n' \
+      'console-setup console-setup/charmap47 select UTF-8' \
+      'console-setup console-setup/codeset47 select Guess optimal character set' \
+      'console-setup console-setup/fontface47 select Fixed' \
+      'console-setup console-setup/fontsize-text47 select 8x16' \
+      'keyboard-configuration keyboard-configuration/modelcode string pc105' \
+      'keyboard-configuration keyboard-configuration/layoutcode string us' \
+      'keyboard-configuration keyboard-configuration/xkb-keymap select us' \
+    | debconf-set-selections \
  && apt-get -o Acquire::Snapshots=${APT_SNAPSHOT} install -y --no-install-recommends \
       build-essential debhelper dpkg-dev fakeroot golang-go console-setup kbd xkb-data \
  && rm -rf /var/lib/apt/lists/*
