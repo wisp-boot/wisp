@@ -90,7 +90,7 @@ func runProvider(con *Console, c config, luksDev string) []byte {
 		halt(con, "key provider %s: %v", c.key, err)
 	}
 	w.Close()
-	key, readErr := io.ReadAll(io.LimitReader(r, maxKeyLen+1))
+	key, readErr := readKey(r)
 	r.Close()
 	waitErr := cmd.Wait()
 	if waitErr != nil {
@@ -109,6 +109,24 @@ func runProvider(con *Console, c config, luksDev string) []byte {
 		halt(con, "key provider %s returned no usable key", c.key)
 	}
 	return key
+}
+
+// readKey reads the provider's key into one buffer of fixed size, so that the
+// key exists in this process exactly once and clear() reaches all of it
+// (io.ReadAll grows its buffer and leaves the outgrown copies behind). One
+// byte more than the limit is read to tell an oversized key from a full one;
+// the caller rejects len > maxKeyLen.
+func readKey(r io.Reader) ([]byte, error) {
+	buf := make([]byte, maxKeyLen+1)
+	n, err := io.ReadFull(r, buf)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		err = nil
+	}
+	if err != nil {
+		clear(buf)
+		return nil, err
+	}
+	return buf[:n], nil
 }
 
 func providerVerdict(code int) string {
