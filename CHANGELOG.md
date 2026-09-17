@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 (2026-09-18)
+
+- Package: an upgrade from one wisp version to the next rebuilds the initramfs of every installed
+  kernel; the first installation still builds only the running kernel's, so that an older kernel
+  keeps the way back.
+
 ## 0.2.0 (2026-09-17)
 
 - `wisp build` refuses, before a reboot, a btrfs root that is a subvolume (no root mount options
@@ -12,9 +18,6 @@
   different archive from a manifest it does not fully understand. A verifier must do the same.
 - wisp-init reads a key provider's key into one fixed buffer, so that clearing it reaches every
   copy.
-- Package: an upgrade from one wisp version to the next rebuilds the initramfs of every installed
-  kernel; the first installation still builds only the running kernel's, so that an older kernel
-  keeps the way back.
 - Documentation: what the archive's bytes depend on, what a verifier needs, the way back with
   one installed kernel; the man pages list the archive's contents as they are.
 

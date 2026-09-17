@@ -1,3 +1,11 @@
+wisp (0.3.0) unstable; urgency=medium
+
+  * An upgrade from one wisp version to the next rebuilds the initramfs of
+    every installed kernel; the first installation still builds only the
+    running kernel's.
+
+ -- Richard Robert Reitz <reitzrobert77@gmail.com>  Fri, 18 Sep 2026 01:15:00 +0200
+
 wisp (0.2.0) unstable; urgency=medium
 
   * Manifest format 1: 'format = 1' on the first line, unknown keys are errors.
