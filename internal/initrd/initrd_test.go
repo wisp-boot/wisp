@@ -438,3 +438,61 @@ func TestMicrocodeCpio(t *testing.T) {
 		t.Fatal("bad microcode value accepted")
 	}
 }
+
+// A parent that exists as a file or a link leaves the entry below it without
+// a directory; the tree refuses instead of writing such an archive.
+func TestTreeRefusesAParentThatIsNotADirectory(t *testing.T) {
+	tr := NewTree()
+	if err := tr.AddFile("usr/lib", []byte("x"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.AddFile("usr/lib/wisp/key/tpm", []byte("y"), true); err == nil || !strings.Contains(err.Error(), "usr/lib exists and is not a directory") {
+		t.Fatalf("file below a file: %v", err)
+	}
+	if err := tr.AddSymlink("lib64", "usr/lib64"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.AddFile("lib64/ld.so", []byte("z"), true); err == nil {
+		t.Fatal("file below a symlink accepted")
+	}
+	if err := tr.AddDir("lib64/x"); err == nil {
+		t.Fatal("directory below a symlink accepted")
+	}
+	if err := tr.AddDir("usr/share/wisp"); err != nil {
+		t.Fatalf("an ordinary directory: %v", err)
+	}
+	// nothing half-added: the refused paths left no entries behind
+	for _, e := range tr.Entries() {
+		if strings.HasPrefix(e.Name, "usr/lib/") || strings.HasPrefix(e.Name, "lib64/") {
+			t.Fatalf("left behind: %s", e.Name)
+		}
+	}
+}
+
+// A newc header field holds eight hex digits. What does not fit is refused,
+// not written with a truncated size.
+func TestNewcFieldLimit(t *testing.T) {
+	old := maxField
+	maxField = 8
+	defer func() { maxField = old }()
+
+	tr := NewTree()
+	if err := tr.AddFile("a", make([]byte, 8), false); err != nil {
+		t.Fatalf("at the limit: %v", err)
+	}
+	if err := tr.AddFile("b", make([]byte, 9), false); err == nil || !strings.Contains(err.Error(), "do not fit a newc size field") {
+		t.Fatalf("over the limit: %v", err)
+	}
+	if err := tr.AddSymlink("c", "123456789"); err == nil {
+		t.Fatal("a link target over the limit was accepted")
+	}
+	if err := tr.AddFile("12345678", nil, false); err == nil {
+		t.Fatal("a name that does not fit with its NUL was accepted")
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("WriteCpio wrote an entry that does not fit")
+		}
+	}()
+	WriteCpio([]Entry{{Name: "x", Mode: modeFile | 0o644, Data: make([]byte, 9)}}, 0)
+}

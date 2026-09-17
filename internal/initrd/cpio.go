@@ -43,7 +43,25 @@ type Entry struct {
 	Data []byte
 }
 
-// WriteCpio serialises the entries as a reproducible newc cpio.
+// maxField is the largest value a newc header field holds: eight hex digits.
+// A variable only so that a test can lower it.
+var maxField uint64 = 1<<32 - 1
+
+// checkEntry refuses what a newc header cannot express instead of writing a
+// truncated size: the archive would unpack to something else than was declared.
+func checkEntry(name string, size int) error {
+	if uint64(size) > maxField {
+		return fmt.Errorf("initrd: %s: %d bytes do not fit a newc size field", name, size)
+	}
+	if uint64(len(name))+1 > maxField {
+		return fmt.Errorf("initrd: a name of %d bytes does not fit a newc name field", len(name))
+	}
+	return nil
+}
+
+// WriteCpio serialises the entries as a reproducible newc cpio. Entries come
+// from Tree or WalkTree, which have checked them; one that does not fit the
+// format here is a programming error.
 func WriteCpio(entries []Entry, sourceEpoch int64) []byte {
 	sorted := append([]Entry(nil), entries...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -62,6 +80,9 @@ func WriteCpio(entries []Entry, sourceEpoch int64) []byte {
 		nlink := uint64(1)
 		if e.Mode&0o170000 == modeDir {
 			nlink = 2
+		}
+		if err := checkEntry(e.Name, len(e.Data)); err != nil {
+			panic(err)
 		}
 		name := []byte(e.Name)
 		name = append(name, 0)
@@ -129,6 +150,9 @@ func WalkTree(root string) ([]Entry, error) {
 				if err != nil {
 					return err
 				}
+				if err := checkEntry(arc, len(data)); err != nil {
+					return err
+				}
 				entries = append(entries, Entry{Name: arc, Mode: modeFile | filePerm(info.Mode()), Data: data})
 			default:
 				// devices, sockets, fifos: devtmpfs provides them, skip
@@ -164,20 +188,29 @@ func clean(p string) string {
 	return strings.Trim(p, "/")
 }
 
-// AddDir adds a directory and all its parents.
-func (t *Tree) AddDir(p string) {
+// AddDir adds a directory and all its parents. A path component that already
+// exists as a file or a symlink is an error: the entry below it would have no
+// directory to live in, and what an unpacker makes of that is not defined.
+func (t *Tree) AddDir(p string) error {
 	p = clean(p)
 	if p == "" {
-		return
+		return nil
 	}
 	for i := 0; i <= len(p); i++ {
 		if i == len(p) || p[i] == '/' {
 			d := p[:i]
-			if _, ok := t.entries[d]; !ok {
+			e, ok := t.entries[d]
+			if !ok {
+				if err := checkEntry(d, 0); err != nil {
+					return err
+				}
 				t.entries[d] = Entry{Name: d, Mode: modeDir | 0o755}
+			} else if e.Mode&0o170000 != modeDir {
+				return fmt.Errorf("initrd: %s exists and is not a directory", d)
 			}
 		}
 	}
+	return nil
 }
 
 // AddFile adds a regular file; exec decides between 0755 and 0644.
@@ -189,7 +222,12 @@ func (t *Tree) AddFile(p string, data []byte, exec bool) error {
 	if e, ok := t.entries[p]; ok && e.Mode&0o170000 != modeFile {
 		return fmt.Errorf("initrd: %s exists and is not a file", p)
 	}
-	t.AddDir(parentOf(p))
+	if err := checkEntry(p, len(data)); err != nil {
+		return err
+	}
+	if err := t.AddDir(parentOf(p)); err != nil {
+		return err
+	}
 	perm := uint32(0o644)
 	if exec {
 		perm = 0o755
@@ -207,7 +245,12 @@ func (t *Tree) AddSymlink(p, target string) error {
 		}
 		return fmt.Errorf("initrd: %s exists and is not a symlink to %s", p, target)
 	}
-	t.AddDir(parentOf(p))
+	if err := checkEntry(p, len(target)); err != nil {
+		return err
+	}
+	if err := t.AddDir(parentOf(p)); err != nil {
+		return err
+	}
 	t.entries[p] = Entry{Name: p, Mode: modeLink | 0o777, Data: []byte(target)}
 	return nil
 }

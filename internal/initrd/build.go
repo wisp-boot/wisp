@@ -65,7 +65,9 @@ func Build(m *Manifest, modulesRoot string) (*Result, error) {
 	t := NewTree()
 	modBase := "lib/modules/" + m.Kernel
 	for _, d := range []string{"proc", "sys", "dev", "etc", "run", modBase} {
-		t.AddDir(d)
+		if err := t.AddDir(d); err != nil {
+			return nil, err
+		}
 	}
 	for _, rp := range res.Order {
 		data, err := os.ReadFile(filepath.Join(moddir, filepath.FromSlash(rp)))
