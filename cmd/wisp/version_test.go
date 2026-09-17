@@ -2,7 +2,11 @@
 
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestVersionLess(t *testing.T) {
 	cases := []struct {
@@ -26,5 +30,21 @@ func TestParseConfOrder(t *testing.T) {
 	m, order := parseConf("key = tpm\n# c\nluks.uuid = x\nkey = credential\n")
 	if m["key"] != "credential" || m["luks.uuid"] != "x" || len(order) != 2 || order[0] != "key" {
 		t.Fatalf("%v %v", m, order)
+	}
+}
+
+func TestUpdateInitramfsDeleteRemovesTheKeptCopy(t *testing.T) {
+	boot := t.TempDir()
+	for _, n := range []string{"initrd.img-1.2.3-test", "initrd.img-1.2.3-test.pre-wisp", "initrd.img-9.9.9-other.pre-wisp"} {
+		if err := os.WriteFile(filepath.Join(boot, n), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rc := updateInitramfs([]string{"-d", "-k", "1.2.3-test", "-b", boot}); rc != 0 {
+		t.Fatalf("rc %d", rc)
+	}
+	left, _ := os.ReadDir(boot)
+	if len(left) != 1 || left[0].Name() != "initrd.img-9.9.9-other.pre-wisp" {
+		t.Fatalf("left in /boot: %v", left)
 	}
 }

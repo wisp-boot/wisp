@@ -70,6 +70,8 @@ func updateInitramfs(args []string) int {
 			} else if verbose {
 				fmt.Fprintf(os.Stderr, "removed %s\n", out)
 			}
+			// the copy the package kept at its first installation goes with its kernel
+			os.Remove(out + ".pre-wisp")
 			continue
 		}
 		bargs := []string{"-k", v, "-o", out}

@@ -5,5 +5,8 @@ remove)
 	echo "wisp: the initrd files under /boot stay as they are; install initramfs-tools (or another" >&2
 	echo "wisp: linux-initramfs-tool) and run update-initramfs -u before the next reboot" >&2
 	;;
+purge)
+	rm -f /boot/initrd.img-*.pre-wisp
+	;;
 esac
 #DEBHELPER#
