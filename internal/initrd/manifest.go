@@ -11,9 +11,16 @@ import (
 	"strings"
 )
 
+// FormatVersion is the manifest format this wisp reads and writes. The format
+// is a contract with every verifier that reproduces archives: a change in what
+// a manifest means gets a new number, and a reader refuses what it does not know
+// instead of building a different archive from it.
+const FormatVersion = 1
+
 // Manifest is the declarative description of an initrd. It names inputs
 // instead of scanning a machine:
 //
+//	format        = 1                    first line (comments aside); any other number is refused
 //	kernel        = 6.8.0-45-generic     the module tree /lib/modules/<kernel>
 //	source_epoch  = 0                    the mtime stamped on every entry
 //	firmware      = modules              copy the firmware files the selected modules name
@@ -33,7 +40,9 @@ import (
 //	/init = /usr/lib/wisp/wisp-init        copied, executable bit preserved
 //	/lib64 = link:usr/lib64                a symlink entry
 //
-// Comments are full-line '#' only, so a cmdline may contain anything.
+// Comments are full-line '#' only, so a cmdline may contain anything. An unknown
+// key, an unknown section and a top-level line without '=' are errors: what
+// this reader does not understand, it does not skip.
 type Manifest struct {
 	Kernel      string
 	SourceEpoch int64
@@ -82,9 +91,27 @@ func ParseManifestString(text, dir string) (*Manifest, error) {
 func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 	m := &Manifest{}
 	section := ""
-	for sc.Scan() {
+	first := true
+	for line := 1; sc.Scan(); line++ {
 		s := strings.TrimSpace(sc.Text())
 		if s == "" || strings.HasPrefix(s, "#") {
+			continue
+		}
+		// The format line comes before anything is interpreted, so a manifest
+		// of another format fails on its number and not on a detail.
+		if first {
+			first = false
+			k, v, ok := strings.Cut(s, "=")
+			if !ok || strings.TrimSpace(k) != "format" {
+				return nil, fmt.Errorf("line %d: a manifest starts with `format = %d`", line, FormatVersion)
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil {
+				return nil, fmt.Errorf("line %d: format %q: %w", line, strings.TrimSpace(v), err)
+			}
+			if n != FormatVersion {
+				return nil, fmt.Errorf("line %d: manifest format %d, this wisp reads format %d", line, n, FormatVersion)
+			}
 			continue
 		}
 		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
@@ -95,10 +122,12 @@ func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 		case "":
 			k, v, ok := strings.Cut(s, "=")
 			if !ok {
-				continue
+				return nil, fmt.Errorf("line %d: line without '=': %q", line, s)
 			}
 			k, v = strings.TrimSpace(k), strings.TrimSpace(v)
 			switch k {
+			case "format":
+				return nil, fmt.Errorf("line %d: `format` is the first line and appears once", line)
 			case "kernel":
 				m.Kernel = strings.ReplaceAll(v, " ", "")
 			case "source_epoch":
@@ -123,6 +152,8 @@ func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 					v = ""
 				}
 				m.Microcode = v
+			default:
+				return nil, fmt.Errorf("line %d: unknown key %q", line, k)
 			}
 		case "modules":
 			m.Modules = append(m.Modules, s)
@@ -146,6 +177,9 @@ func ParseManifestReader(sc *bufio.Scanner) (*Manifest, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
+	if first {
+		return nil, fmt.Errorf("a manifest starts with `format = %d`", FormatVersion)
+	}
 	if m.Kernel == "" {
 		return nil, fmt.Errorf("no `kernel = <version>`")
 	}
@@ -166,6 +200,7 @@ func (m *Manifest) CmdlineString() string {
 // String renders the manifest back in its file format.
 func (m *Manifest) String() string {
 	var b strings.Builder
+	fmt.Fprintf(&b, "format        = %d\n", FormatVersion)
 	fmt.Fprintf(&b, "kernel        = %s\nsource_epoch  = %d\n", m.Kernel, m.SourceEpoch)
 	if m.Firmware != "" {
 		fmt.Fprintf(&b, "firmware      = %s\n", m.Firmware)

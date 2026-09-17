@@ -87,7 +87,7 @@ func TestVectorModules(t *testing.T) {
 		mk("sound/core/snd.ko", "")
 		mk("kernel/drivers-foo/foo.ko", "")
 		os.WriteFile(filepath.Join(mod, "modules.builtin"), []byte("kernel/drivers/builtin-thing.ko\n"), 0o644)
-		os.WriteFile(filepath.Join(dir, "manifest"), []byte("kernel = "+ver+"\nsource_epoch = 0\n\n[modules]\nbuiltin_thing\n+dir:kernel/drivers\n+dir:kernel/fs\n+dir:kernel/crypto\n-dir:kernel/drivers/net\n-dir:kernel/drivers/gpu\n-dir:sound\n\n[files]\n/init = init\n/lib64 = link:usr/lib64\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, "manifest"), []byte("format = 1\nkernel = "+ver+"\nsource_epoch = 0\n\n[modules]\nbuiltin_thing\n+dir:kernel/drivers\n+dir:kernel/fs\n+dir:kernel/crypto\n-dir:kernel/drivers/net\n-dir:kernel/drivers/gpu\n-dir:sound\n\n[files]\n/init = init\n/lib64 = link:usr/lib64\n"), 0o644)
 		os.WriteFile(filepath.Join(dir, "init"), []byte("#!/bin/sh\n"), 0o755)
 	}
 	m, err := ParseManifest(filepath.Join(dir, "manifest"))

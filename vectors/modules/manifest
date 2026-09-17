@@ -1,3 +1,4 @@
+format = 1
 kernel = 9.9.9-test
 source_epoch = 0
 

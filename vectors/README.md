@@ -19,7 +19,8 @@ digest with the mtime pinned to 1700000000 (a control: the epoch must change the
 
 `9.9.9-test/` is a synthetic `/lib/modules/<version>` tree of tiny ELF64 modules whose
 `.modinfo` carries `depends=` and `name=` (built with objcopy), plus `modules.builtin`.
-`manifest` selects subtrees with cutouts. `expected.order` is the resolved load order,
+`manifest` (format 1, stated on its first line; a reader refuses any other number and any key or
+section it does not know) selects subtrees with cutouts. `expected.order` is the resolved load order,
 `expected.cpio` the built initrd (uncompressed, source epoch 0), `expected.sha256` its digest.
 The resolution must come from the modules' own `.modinfo`, never from a depmod output.
 

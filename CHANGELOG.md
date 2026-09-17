@@ -30,6 +30,10 @@ First release.
   the archive. No selection tool; a pure function of the two packages.
 - Manifest keys `firmware` and `microcode` are additions to the manifest format; a verifier
   that reproduces archives must implement them.
+- The manifest format carries its number: `format = 1` is the first line, written by
+  `wisp manifest` and required by `wisp build --manifest`. Another number, an unknown key,
+  an unknown section or a top-level line without `=` is an error, so a reader never builds a
+  different archive from a manifest it does not fully understand. A verifier must do the same.
 - `wisp`: manifest assembly from `/etc/wisp` and `/etc/crypttab`, deterministic newc cpio,
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`
   facade, kernel hooks.

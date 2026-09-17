@@ -163,7 +163,7 @@ func TestWalkTreeMatchesInMemory(t *testing.T) {
 }
 
 func TestManifestRoundTrip(t *testing.T) {
-	text := "# comment\nkernel = 6.1.0-test\nsource_epoch = 7\n\n[modules]\nnvme\n+dir:kernel/fs\n-dir:kernel/fs/nfs\n\n[cmdline]\nroot=/dev/mapper/root quiet # not a comment\n\n[files]\n/init = init\n/lib64 = link:usr/lib64\n"
+	text := "# comment\nformat = 1\nkernel = 6.1.0-test\nsource_epoch = 7\n\n[modules]\nnvme\n+dir:kernel/fs\n-dir:kernel/fs/nfs\n\n[cmdline]\nroot=/dev/mapper/root quiet # not a comment\n\n[files]\n/init = init\n/lib64 = link:usr/lib64\n"
 	m, err := ParseManifestString(text, "/x")
 	if err != nil {
 		t.Fatal(err)
@@ -181,8 +181,39 @@ func TestManifestRoundTrip(t *testing.T) {
 	if again.String() != m.String() {
 		t.Fatalf("round trip differs:\n%s\n%s", m.String(), again.String())
 	}
-	if _, err := ParseManifestString("[modules]\nx\n", "/x"); err == nil {
+	if _, err := ParseManifestString("format = 1\n[modules]\nx\n", "/x"); err == nil {
 		t.Fatal("missing kernel accepted")
+	}
+	if !strings.HasPrefix(m.String(), "format        = 1\n") {
+		t.Fatalf("the rendered manifest does not start with the format line:\n%s", m.String())
+	}
+}
+
+// A reader refuses what it does not understand instead of building a
+// different archive from it.
+func TestManifestFormat(t *testing.T) {
+	for _, c := range []struct{ name, text, want string }{
+		{"no format line", "kernel = x\n", "starts with `format = 1`"},
+		{"empty", "# only a comment\n\n", "starts with `format = 1`"},
+		{"format not first", "kernel = x\nformat = 1\n", "starts with `format = 1`"},
+		{"section first", "[modules]\nx\n", "starts with `format = 1`"},
+		{"newer format", "format = 2\nkernel = x\nprovider = tpm 0.2.0\n", "manifest format 2, this wisp reads format 1"},
+		{"format zero", "format = 0\nkernel = x\n", "manifest format 0"},
+		{"format not a number", "format = one\nkernel = x\n", "format \"one\""},
+		{"format twice", "format = 1\nkernel = x\nformat = 1\n", "appears once"},
+		{"unknown key", "format = 1\nkernel = x\nprovider = tpm 0.2.0\n", "line 3: unknown key \"provider\""},
+		{"misspelt key", "format = 1\nkernel = x\nfirmwares = modules\n", "unknown key \"firmwares\""},
+		{"line without =", "format = 1\nkernel = x\nnvme\n", "line 3: line without '='"},
+		{"unknown section", "format = 1\nkernel = x\n[debs]\na=1\n", "unknown section [debs]"},
+	} {
+		_, err := ParseManifestString(c.text, "/x")
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: error %v, want it to contain %q", c.name, err, c.want)
+		}
+	}
+	// comments and blank lines may precede the format line
+	if _, err := ParseManifestString("\n# built by hand\n\nformat = 1\nkernel = x\n", "/x"); err != nil {
+		t.Errorf("comments before the format line: %v", err)
 	}
 }
 
@@ -253,7 +284,7 @@ func TestResolveSelectorsAndBuild(t *testing.T) {
 
 	initPath := filepath.Join(root, "init")
 	os.WriteFile(initPath, []byte("#!/bin/sh\n"), 0o755)
-	m, err := ParseManifestString("kernel = "+ver+"\n[modules]\next4\n[files]\n/init = init\n/lib64 = link:usr/lib64\n", root)
+	m, err := ParseManifestString("format = 1\nkernel = "+ver+"\n[modules]\next4\n[files]\n/init = init\n/lib64 = link:usr/lib64\n", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +353,7 @@ func TestFirmwarePlacement(t *testing.T) {
 	defer func() { FirmwareRoot = old }()
 
 	os.WriteFile(filepath.Join(root, "init"), []byte("#!/bin/sh\n"), 0o755)
-	m, err := ParseManifestString("kernel = "+ver+"\nfirmware = modules\n[modules]\ngpu\n[files]\n/init = init\n", root)
+	m, err := ParseManifestString("format = 1\nkernel = "+ver+"\nfirmware = modules\n[modules]\ngpu\n[files]\n/init = init\n", root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +394,7 @@ func TestFirmwarePlacement(t *testing.T) {
 		t.Fatal("file duplicated under the directory symlink instead of shared")
 	}
 	// without the firmware key nothing is placed
-	m2, _ := ParseManifestString("kernel = "+ver+"\n[modules]\ngpu\n[files]\n/init = init\n", root)
+	m2, _ := ParseManifestString("format = 1\nkernel = "+ver+"\n[modules]\ngpu\n[files]\n/init = init\n", root)
 	r3, err := Build(m2, root)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +402,7 @@ func TestFirmwarePlacement(t *testing.T) {
 	if r3.FirmwareFiles != 0 || len(r3.Cpio) >= len(r1.Cpio) {
 		t.Fatal("firmware placed without the key")
 	}
-	if _, err := ParseManifestString("kernel = x\nfirmware = maybe\n", root); err == nil {
+	if _, err := ParseManifestString("format = 1\nkernel = x\nfirmware = maybe\n", root); err == nil {
 		t.Fatal("bad firmware value accepted")
 	}
 }
@@ -403,7 +434,7 @@ func TestMicrocodeCpio(t *testing.T) {
 	if n, _ := MicrocodeCpio(t.TempDir(), 0); n != nil {
 		t.Fatal("expected nil without microcode directories")
 	}
-	if _, err := ParseManifestString("kernel = x\nmicrocode = some\n", root); err == nil {
+	if _, err := ParseManifestString("format = 1\nkernel = x\nmicrocode = some\n", root); err == nil {
 		t.Fatal("bad microcode value accepted")
 	}
 }

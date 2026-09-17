@@ -62,7 +62,10 @@ for the inputs), resolve the modules, and write the archive to
 The output is written to a temporary file and renamed, so a failed build
 leaves the previous initrd untouched. With
 .B \-\-manifest
-an explicit manifest is built instead of assembling one. With
+an explicit manifest is built instead of assembling one; its first line is
+.BR "format = 1" ,
+and a manifest of another format, or one with a key or section this version
+does not know, is refused rather than built differently. With
 .B \-\-stage
 the assembled manifest and every generated file are kept in
 .IR dir ,
