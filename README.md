@@ -3,9 +3,12 @@
 A reproducible initramfs for encrypted root file systems, in one static Go binary.
 
 `wisp build` assembles an initramfs whose bytes are a pure function of a declared manifest and
-the kernel package's module tree. Same inputs, same bytes, bit for bit, on any machine. Nothing
-is scanned from the running system, no binaries are collected by following shared libraries, no
-file system times leak into the archive. The archive contains one program, `wisp-init`, which
+the files it names: the kernel package's module tree, the firmware and microcode files of their
+packages, the `wisp-init` binary and the keymap from the wisp package, and a few small
+configuration files the builder generates from `/etc/wisp`, `/etc/crypttab` and the volume layout
+of the machine (`--stage` keeps them). Same inputs, same bytes, bit for bit, on any machine. The
+hardware of the building machine is not scanned (there is no host-only mode), no binaries are
+collected by following shared libraries, no file system times leak into the archive. The archive contains one program, `wisp-init`, which
 finds the hardware without udev, opens LUKS2 without cryptsetup, activates a linear logical
 volume without lvm2, and hands over to the real system.
 
@@ -43,6 +46,16 @@ previous initrd, which is the way back if wisp does not boot your machine: pick 
 in the boot menu, then `apt install initramfs-tools` (which removes wisp) and
 `update-initramfs -u`.
 
+A machine with a single installed kernel has no such way back: the installation overwrites the
+only initrd, and there is no rescue shell. Keep a copy before installing,
+
+```
+sudo cp /boot/initrd.img-$(uname -r) /boot/initrd.img-$(uname -r).pre-wisp
+```
+
+and if wisp does not boot, press `e` on the GRUB entry, append `.pre-wisp` to the `initrd` line
+and boot with Ctrl-x. Without the copy the way back is a rescue medium.
+
 Kernel updates call the hook under `/etc/kernel/postinst.d`, packages that call
 `update-initramfs` reach the compatible facade, and packages that activate the
 `update-initramfs` dpkg trigger (linux-firmware, kmod, udev, cryptsetup, lvm2, ...)
@@ -75,15 +88,18 @@ root       = /dev/mapper/ubuntu--vg-ubuntu--lv
 `/etc/wisp/modules`, module names and directory selectors (`+dir:kernel/drivers/nvme`,
 `-dir:kernel/drivers/usb/gadget`). Without it the selection is, like initramfs-tools' "most", every module of
 the kernel except the subtrees that cannot matter before the root file system is mounted
-(network, sound, media, staging, InfiniBand, Bluetooth, IIO, hwmon, kheaders, ZFS, and GPUs: as
+(network, sound, media, staging, InfiniBand, Bluetooth, IIO, hwmon, compute accelerators, hardware
+crypto accelerators, USB modems, USB serial adapters and miscellaneous USB drivers, kheaders, ZFS,
+and GPUs: as
 in Ubuntu's own initramfs, the console before the passphrase runs on the firmware frame buffer
 the EFI GOP leaves behind, driven by the built-in simpledrm, and the real GPU driver comes with
 the system). The firmware files the selected modules name are placed too (symlinks kept, one
 copy per file), and the CPU microcode from the amd64-microcode and intel-microcode packages is
-prepended as the uncompressed early cpio the kernel's loader expects. About 3100 modules, 53 MB
-compressed, plus firmware and 22 MB of microcode, on an Ubuntu kernel; `firmware = none` and
-`microcode = none` in wisp.conf leave them out. Blacklists from /etc/modprobe.d are honoured. Modules are loaded at boot only when hardware matches, so declaring many costs archive
-size and early-boot memory, not time.
+prepended as the uncompressed early cpio the kernel's loader expects. On an Ubuntu 24.04 OEM
+kernel that is about 3200 modules and an initrd of about 78 MB, 22 MB of which is the microcode;
+`firmware = none` and `microcode = none` in wisp.conf leave them out. Blacklists from
+/etc/modprobe.d are honoured. Modules are loaded at boot only when hardware matches, so declaring
+many costs archive size and early-boot memory, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
 running system when absent. Rebuild the initramfs after resizing the root volume.
@@ -111,9 +127,13 @@ make deb        # the Debian package in a container (podman), with SHA256SUMS
 ```
 
 To verify an initramfs on another machine, take the manifest and the generated files from the
-machine that built it (`wisp manifest --stage <dir>` writes both), fetch the same kernel
-package, and run `wisp build --manifest <dir>/manifest --compress none` there. The uncompressed
-archives must be byte-identical; `wisp build` prints their SHA-256. The module resolution reads
+machine that built it (`wisp manifest --stage <dir>` writes both; use the same absolute `<dir>` on
+both machines, because the manifest names the generated files by path), install the same versions
+of the kernel packages, of wisp and, unless `firmware = none` and `microcode = none`, of
+linux-firmware, amd64-microcode and intel-microcode, and run
+`wisp build --manifest <dir>/manifest --compress none` there. The uncompressed archives must be
+byte-identical; `wisp build` prints their SHA-256. The manifest does not record package versions
+yet: which versions went in is for the two sides to agree on. The module resolution reads
 each module's own `.modinfo` section and never `modules.dep`, so it does not depend on the
 depmod version of either machine.
 
@@ -129,10 +149,12 @@ integration against every new kernel package.
 
 Ubuntu's standard encrypted installation (LUKS2 with a linear logical volume holding ext4), LUKS2
 with the root file system directly inside, a root file system without encryption on a plain
-partition; ext4, xfs and single-device btrfs. Not supported in this release: LUKS1, software
-RAID, multi-device btrfs, LUKS on a logical volume, LVM without LUKS, striped, thin or RAID
-logical volumes, resume from hibernation, network root, firmware files in the archive.
-Unsupported layouts are rejected by `wisp build`, before a reboot.
+partition; ext4, xfs and single-device btrfs mounted without options (the default subvolume).
+Not supported in this release: LUKS1, software RAID, multi-device btrfs, a btrfs root that needs
+`subvol=` (there are no root mount options yet; Ubuntu's btrfs installation uses `@`), LUKS on a
+logical volume, LVM without LUKS, striped, thin or RAID logical volumes, resume from hibernation,
+network root. `wisp build` rejects the layouts it recognises as unsupported before a reboot; it
+does not recognise the btrfs subvolume case.
 
 ## Layout of the repository
 
@@ -142,6 +164,8 @@ cmd/wisp/          the builder, update-initramfs facade and kernel hooks
 internal/kmod/     .modinfo reader and module decompression (zstd, xz, gzip) in pure Go
 internal/initrd/   manifest, deterministic cpio, module resolution, build
 internal/luks/     LUKS2 volume-key recovery and device-mapper ioctls
+tools/             mkkeymaps.sh: precompiles the console keymaps at package build
+vectors/           language-neutral test vectors (cpio, module resolution, LUKS2)
 debian/            the package
 man/               wisp(8), wisp.conf(5), wisp-init(7)
 vendor/            pinned dependencies (all BSD or MIT)
