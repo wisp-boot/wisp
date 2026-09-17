@@ -153,8 +153,7 @@ partition; ext4, xfs and single-device btrfs mounted without options (the defaul
 Not supported in this release: LUKS1, software RAID, multi-device btrfs, a btrfs root that needs
 `subvol=` (there are no root mount options yet; Ubuntu's btrfs installation uses `@`), LUKS on a
 logical volume, LVM without LUKS, striped, thin or RAID logical volumes, resume from hibernation,
-network root. `wisp build` rejects the layouts it recognises as unsupported before a reboot; it
-does not recognise the btrfs subvolume case.
+network root. Unsupported layouts are rejected by `wisp build`, before a reboot.
 
 ## Layout of the repository
 

@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,14 +60,18 @@ func luksUUIDOf(source string) (string, error) {
 	return luks.UUID(source)
 }
 
-// rootDevice returns the source device of the root mount from /proc/self/mountinfo.
-func rootDevice() (string, error) {
-	f, err := os.Open("/proc/self/mountinfo")
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
+// rootMount is the root file system's line of /proc/self/mountinfo.
+type rootMount struct {
+	source string // the mounted device
+	fstype string
+	fsroot string // the directory of the file system that is mounted; "/" unless a subtree or subvolume
+}
+
+// rootMountFrom finds the mount of "/" in mountinfo text. The last match
+// wins: a later mount on "/" covers the earlier ones.
+func rootMountFrom(r io.Reader) (rootMount, error) {
+	var found *rootMount
+	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fs := strings.Fields(sc.Text())
 		// mount ID, parent ID, major:minor, root, mount point, options, optional..., "-", fstype, source, super options
@@ -75,11 +80,48 @@ func rootDevice() (string, error) {
 		}
 		for i := 6; i < len(fs); i++ {
 			if fs[i] == "-" && i+2 < len(fs) {
-				return fs[i+2], nil
+				found = &rootMount{source: fs[i+2], fstype: fs[i+1], fsroot: fs[3]}
+				break
 			}
 		}
 	}
-	return "", fmt.Errorf("root mount not found in /proc/self/mountinfo")
+	if err := sc.Err(); err != nil {
+		return rootMount{}, err
+	}
+	if found == nil {
+		return rootMount{}, fmt.Errorf("root mount not found in /proc/self/mountinfo")
+	}
+	return *found, nil
+}
+
+// checkRootMount rejects what wisp-init could not mount: it mounts the root
+// file system without options, so a btrfs root that is a subvolume would come
+// up as the top of the file system, without /sbin/init. (A subvolume made
+// the default with `btrfs subvolume set-default` would work, but cannot be
+// told apart here; it is rejected too.)
+func checkRootMount(m rootMount) error {
+	if m.fstype == "btrfs" && m.fsroot != "/" {
+		return fmt.Errorf("the root file system is the btrfs subvolume %s of %s; wisp-init mounts the root without options and would get the top of the file system. Root mount options (subvol=) are not supported yet", m.fsroot, m.source)
+	}
+	return nil
+}
+
+// rootDevice returns the source device of the root mount after checking that
+// wisp-init can mount it.
+func rootDevice() (string, error) {
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	m, err := rootMountFrom(f)
+	if err != nil {
+		return "", err
+	}
+	if err := checkRootMount(m); err != nil {
+		return "", err
+	}
+	return m.source, nil
 }
 
 // dmInfo describes a device-mapper device from sysfs.

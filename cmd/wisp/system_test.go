@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -35,5 +36,49 @@ func TestReadBlacklist(t *testing.T) {
 	got := readBlacklist(dir)
 	if len(got) != 2 || got[0] != "nouveau" || got[1] != "snd_pcsp" {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestRootMount(t *testing.T) {
+	const ext4 = `26 1 253:1 / / rw,relatime shared:1 - ext4 /dev/mapper/ubuntu--vg-ubuntu--lv rw
+31 26 0:24 / /proc rw - proc proc rw
+`
+	m, err := rootMountFrom(strings.NewReader(ext4))
+	if err != nil || m.source != "/dev/mapper/ubuntu--vg-ubuntu--lv" || m.fstype != "ext4" || m.fsroot != "/" {
+		t.Fatalf("%+v %v", m, err)
+	}
+	if err := checkRootMount(m); err != nil {
+		t.Fatalf("ext4 rejected: %v", err)
+	}
+
+	// Ubuntu's btrfs installation: the root is the subvolume @.
+	const subvol = `29 1 0:26 /@ / rw,relatime shared:1 - btrfs /dev/mapper/dm_crypt-0 rw,ssd,subvolid=256,subvol=/@
+`
+	m, err = rootMountFrom(strings.NewReader(subvol))
+	if err != nil || m.fstype != "btrfs" || m.fsroot != "/@" {
+		t.Fatalf("%+v %v", m, err)
+	}
+	if err := checkRootMount(m); err == nil || !strings.Contains(err.Error(), "subvolume /@") {
+		t.Fatalf("a btrfs subvolume root was accepted: %v", err)
+	}
+
+	// btrfs mounted at the top of the file system is what wisp-init gets too.
+	const top = `29 1 0:26 / / rw - btrfs /dev/sda2 rw,subvolid=5,subvol=/
+`
+	m, _ = rootMountFrom(strings.NewReader(top))
+	if err := checkRootMount(m); err != nil {
+		t.Fatalf("top-level btrfs rejected: %v", err)
+	}
+
+	// optional fields before the separator; a later mount on / covers the earlier one
+	const stacked = `20 1 8:1 / / rw - ext4 /dev/sda1 rw
+40 20 8:2 / / rw master:1 shared:2 - xfs /dev/sda2 rw
+`
+	m, _ = rootMountFrom(strings.NewReader(stacked))
+	if m.source != "/dev/sda2" || m.fstype != "xfs" {
+		t.Fatalf("%+v", m)
+	}
+	if _, err := rootMountFrom(strings.NewReader("31 26 0:24 / /proc rw - proc proc rw\n")); err == nil {
+		t.Fatal("no root mount, no error")
 	}
 }
