@@ -23,6 +23,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -36,6 +37,57 @@ const (
 	providerRoot = "/usr/lib/wisp/key"
 	modulesRoot  = "/lib/modules"
 )
+
+// providerName is what wisp-init accepts as a provider name (cmd/wisp-init/key.go);
+// checked here too, so that a bad name fails the build and not the boot.
+var providerName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+// providerFiles returns the [files] entries of a key provider: the executable
+// <binRoot>/<key> and every file under <confRoot>/<key>/, sorted. The archive
+// paths are the installed ones whatever roots the sources come from. The
+// built-in key sources have no files. Symbolic links in the configuration
+// directory are followed, as for every [files] source.
+func providerFiles(key, binRoot, confRoot string) ([]initrd.FileSpec, error) {
+	switch key {
+	case "none", "passphrase", "credential":
+		return nil, nil
+	}
+	if !providerName.MatchString(key) {
+		return nil, fmt.Errorf("key=%q is not a valid provider name (a lower-case letter, then up to 31 of a-z 0-9 _ -)", key)
+	}
+	bin := filepath.Join(binRoot, key)
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return nil, fmt.Errorf("key=%s: provider %s is not installed", key, bin)
+	}
+	if !fi.Mode().IsRegular() || fi.Mode()&0o111 == 0 {
+		return nil, fmt.Errorf("key=%s: provider %s is not an executable file", key, bin)
+	}
+	out := []initrd.FileSpec{{Archive: filepath.Join(providerRoot, key), Source: bin}}
+	cdir := filepath.Join(confRoot, key)
+	if fi, err := os.Stat(cdir); err != nil || !fi.IsDir() {
+		return out, nil // the configuration directory is optional
+	}
+	var files []string
+	err = filepath.WalkDir(cdir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("key=%s: %w", key, err)
+	}
+	sort.Strings(files)
+	for _, p := range files {
+		rel, _ := filepath.Rel(confRoot, p)
+		out = append(out, initrd.FileSpec{Archive: filepath.Join(confDir, "key", rel), Source: p})
+	}
+	return out, nil
+}
 
 // defaultModules is the selection used when /etc/wisp/modules does not exist,
 // in the spirit of initramfs-tools' "most": every module of the kernel except
@@ -381,29 +433,11 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 	}
 
 	// 5. a key provider and its configuration
-	switch key {
-	case "none", "passphrase", "credential":
-	default:
-		bin := filepath.Join(providerRoot, key)
-		if _, err := os.Stat(bin); err != nil {
-			return nil, fmt.Errorf("key=%s: provider %s is not installed", key, bin)
-		}
-		m.Files = append(m.Files, initrd.FileSpec{Archive: bin, Source: bin})
-		cdir := filepath.Join(confDir, "key", key)
-		if fi, err := os.Stat(cdir); err == nil && fi.IsDir() {
-			var files []string
-			filepath.WalkDir(cdir, func(p string, d fs.DirEntry, err error) error {
-				if err == nil && !d.IsDir() {
-					files = append(files, p)
-				}
-				return nil
-			})
-			sort.Strings(files)
-			for _, p := range files {
-				m.Files = append(m.Files, initrd.FileSpec{Archive: p, Source: p})
-			}
-		}
+	pf, err := providerFiles(key, providerRoot, filepath.Join(confDir, "key"))
+	if err != nil {
+		return nil, err
 	}
+	m.Files = append(m.Files, pf...)
 	return m, nil
 }
 
