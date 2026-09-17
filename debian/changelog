@@ -1,7 +1,6 @@
 wisp (0.2.0) unstable; urgency=medium
 
   * Manifest format 1: 'format = 1' on the first line, unknown keys are errors.
-  * The first installation keeps the previous initrd as initrd.img-<v>.pre-wisp.
   * wisp build refuses a btrfs subvolume root, an invalid key provider and
     archive entries that do not fit the newc format; recognises the root
     logical volume without a device-mapper UUID.

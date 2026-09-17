@@ -1,29 +1,13 @@
 #!/bin/sh
 # Build the initramfs for the running kernel. Only the running kernel: an
-# older kernel keeps its previous initrd, and the running kernel's previous
-# initrd is kept as initrd.img-<version>.pre-wisp; either is the way back if
-# wisp does not boot this machine. Set WISP_NO_BUILD=1 to skip (e.g. in a chroot).
+# older kernel keeps its previous initrd, which is the way back if wisp does
+# not boot this machine. Set WISP_NO_BUILD=1 to skip (e.g. in a chroot).
 set -e
 case "$1" in
 configure)
 	if [ -z "$WISP_NO_BUILD" ]; then
 		v=$(uname -r)
 		if [ -f "/boot/vmlinuz-$v" ] && [ -d "/lib/modules/$v" ]; then
-			# First installation: keep the initrd this machine boots with today.
-			# There is no rescue shell, and with one installed kernel there is no
-			# older initrd either; the copy is the way back (README, Install).
-			# Never overwritten; removed with its kernel and on purge.
-			# WISP_NO_BACKUP=1 skips it, e.g. when /boot is too small for two.
-			old="/boot/initrd.img-$v"
-			if [ -z "$2" ] && [ -z "$WISP_NO_BACKUP" ] && [ -f "$old" ] && [ ! -e "$old.pre-wisp" ]; then
-				if ! cp -p "$old" "$old.pre-wisp"; then
-					rm -f "$old.pre-wisp"
-					echo "wisp: could not keep a copy of $old (is /boot full?); nothing was changed." >&2
-					echo "wisp: free space, or set WISP_NO_BACKUP=1 to install without a way back" >&2
-					exit 1
-				fi
-				echo "wisp: kept the previous initrd as $old.pre-wisp" >&2
-			fi
 			if ! wisp build -k "$v"; then
 				echo "wisp: building the initramfs for $v failed; /boot/initrd.img-$v was left unchanged" >&2
 				exit 1

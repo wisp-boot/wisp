@@ -2,9 +2,6 @@
 
 ## 0.2.0 (2026-09-17)
 
-- The first installation keeps the running kernel's previous initrd as
-  `/boot/initrd.img-<version>.pre-wisp`: with one installed kernel there is no older entry to
-  boot, and there is no rescue shell. Removed with its kernel and on purge.
 - `wisp build` refuses, before a reboot, a btrfs root that is a subvolume (no root mount options
   yet), a provider name or file that wisp-init would halt on, and archive entries that do not
   fit the newc format or whose parent is not a directory. It recognises the root logical volume

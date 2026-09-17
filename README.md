@@ -46,12 +46,10 @@ previous initrd, which is the way back if wisp does not boot your machine: pick 
 in the boot menu, then `apt install initramfs-tools` (which removes wisp) and
 `update-initramfs -u`.
 
-A machine with a single installed kernel has no older entry. For that case the first installation
-keeps the running kernel's previous initrd as `/boot/initrd.img-<version>.pre-wisp` (never
-overwritten, removed with its kernel and on purge; `WISP_NO_BACKUP=1` skips it when `/boot` has no
-room for two). If wisp does not boot, press `e` on the GRUB entry, append `.pre-wisp` to the
-`initrd` line and boot with Ctrl-x. There is no rescue shell; without the copy and without an
-older kernel the way back is a rescue medium.
+A machine with a single installed kernel has no such way back: the installation overwrites the
+only initrd, and there is no rescue shell. Like every initramfs generator, wisp either boots the
+machine or it does not; who wants a way back keeps a copy of `/boot/initrd.img-$(uname -r)` before
+installing (GRUB boots it after editing the `initrd` line with `e`), or a rescue medium at hand.
 
 Kernel updates call the hook under `/etc/kernel/postinst.d`, packages that call
 `update-initramfs` reach the compatible facade, and packages that activate the
