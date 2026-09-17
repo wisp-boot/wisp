@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 (2026-09-17)
+
+- The first installation keeps the running kernel's previous initrd as
+  `/boot/initrd.img-<version>.pre-wisp`: with one installed kernel there is no older entry to
+  boot, and there is no rescue shell. Removed with its kernel and on purge.
+- `wisp build` refuses, before a reboot, a btrfs root that is a subvolume (no root mount options
+  yet), a provider name or file that wisp-init would halt on, and archive entries that do not
+  fit the newc format or whose parent is not a directory. It recognises the root logical volume
+  also when its device-mapper UUID is empty.
+- The manifest format carries its number: `format = 1` is the first line, written by
+  `wisp manifest` and required by `wisp build --manifest`. Another number, an unknown key,
+  an unknown section or a top-level line without `=` is an error, so a reader never builds a
+  different archive from a manifest it does not fully understand. A verifier must do the same.
+- wisp-init reads a key provider's key into one fixed buffer, so that clearing it reaches every
+  copy.
+- Documentation: what the archive's bytes depend on, what a verifier needs, the way back with
+  one installed kernel; the man pages list the archive's contents as they are.
+
 ## 0.1.0 (2026-09-15)
 
 First release.
@@ -30,17 +48,6 @@ First release.
   the archive. No selection tool; a pure function of the two packages.
 - Manifest keys `firmware` and `microcode` are additions to the manifest format; a verifier
   that reproduces archives must implement them.
-- The first installation keeps the running kernel's previous initrd as
-  `/boot/initrd.img-<version>.pre-wisp`: with one installed kernel there is no older entry to
-  boot, and there is no rescue shell. Removed with its kernel and on purge.
-- `wisp build` refuses, before a reboot, a btrfs root that is a subvolume (no root mount options
-  yet), a provider name or file that wisp-init would halt on, and archive entries that do not
-  fit the newc format or whose parent is not a directory. It recognises the root logical volume
-  also when its device-mapper UUID is empty.
-- The manifest format carries its number: `format = 1` is the first line, written by
-  `wisp manifest` and required by `wisp build --manifest`. Another number, an unknown key,
-  an unknown section or a top-level line without `=` is an error, so a reader never builds a
-  different archive from a manifest it does not fully understand. A verifier must do the same.
 - `wisp`: manifest assembly from `/etc/wisp` and `/etc/crypttab`, deterministic newc cpio,
   module resolution from `.modinfo` (no depmod), deterministic zstd, `update-initramfs`
   facade, kernel hooks.

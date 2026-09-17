@@ -36,7 +36,7 @@ On any failure the init says why and halts. There is no rescue shell.
 ## Install (Ubuntu 24.04, Debian 12 and later)
 
 ```
-sudo apt install ./wisp_0.1.0_amd64.deb
+sudo apt install ./wisp_0.2.0_amd64.deb
 sudo reboot
 ```
 
