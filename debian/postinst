@@ -1,11 +1,21 @@
 #!/bin/sh
-# Build the initramfs for the running kernel. Only the running kernel: an
-# older kernel keeps its previous initrd, which is the way back if wisp does
-# not boot this machine. Set WISP_NO_BUILD=1 to skip (e.g. in a chroot).
+# First installation: build the initramfs for the running kernel only. An
+# older kernel keeps the initrd another generator made, which is the way back
+# if wisp does not boot this machine. Upgrade from one wisp to the next: every
+# initrd under /boot is already wisp's, so rebuild them all and no kernel
+# keeps an init older than the installed package. A build that fails leaves
+# that initrd unchanged. Set WISP_NO_BUILD=1 to skip (e.g. in a chroot).
 set -e
 case "$1" in
 configure)
-	if [ -z "$WISP_NO_BUILD" ]; then
+	if [ -n "$WISP_NO_BUILD" ]; then
+		:
+	elif [ -n "$2" ]; then
+		if ! wisp update-initramfs -u -k all; then
+			echo "wisp: rebuilding an initramfs failed; that initrd under /boot was left unchanged" >&2
+			exit 1
+		fi
+	else
 		v=$(uname -r)
 		if [ -f "/boot/vmlinuz-$v" ] && [ -d "/lib/modules/$v" ]; then
 			if ! wisp build -k "$v"; then

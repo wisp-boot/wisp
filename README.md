@@ -41,10 +41,11 @@ sudo reboot
 ```
 
 wisp provides `linux-initramfs-tool` and replaces initramfs-tools, like dracut does. On
-installation it builds the initramfs for the running kernel only; older kernels keep their
+first installation it builds the initramfs for the running kernel only; older kernels keep their
 previous initrd, which is the way back if wisp does not boot your machine: pick the older kernel
 in the boot menu, then `apt install initramfs-tools` (which removes wisp) and
-`update-initramfs -u`.
+`update-initramfs -u`. An upgrade from one wisp version to the next rebuilds the initramfs of
+every installed kernel.
 
 A machine with a single installed kernel has no such way back: the installation overwrites the
 only initrd, and there is no rescue shell. Like every initramfs generator, wisp either boots the
