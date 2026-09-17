@@ -27,16 +27,22 @@ wisp \- build a reproducible initramfs from declared inputs
 .SH DESCRIPTION
 .B wisp
 assembles an initramfs whose bytes are a pure function of a manifest and the
-kernel package's module tree. It does not scan the running machine for
-loaded modules, does not copy binaries found by their shared libraries, and
-does not stamp file system times into the archive. Two machines with the same
-kernel package and the same declared inputs produce the same bytes.
+files it names: the kernel package's module tree, the firmware and microcode
+files of their packages, the init and the keymap from the wisp package, and
+the small configuration files the builder generates. It does not scan the
+running machine for loaded modules or hardware, does not copy binaries found
+by their shared libraries, and does not stamp file system times into the
+archive. Two machines with the same package versions and the same declared
+inputs produce the same bytes.
 .PP
 The initramfs holds one static program as
 .IR /init ,
 .BR wisp-init (7),
-the resolved kernel modules, and the measured configuration
-.BR wisp.conf (5).
+the resolved kernel modules with the firmware files they name, the measured
+configuration
+.BR wisp.conf (5)
+and, when configured, a keymap, a volume table, a detached header copy and a
+key provider; the CPU microcode is prepended as an early cpio.
 .PP
 The same binary is installed as
 .B /usr/sbin/update-initramfs

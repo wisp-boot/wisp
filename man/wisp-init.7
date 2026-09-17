@@ -45,17 +45,25 @@ an initramfs with a shell is an initramfs with a root shell for whoever holds
 the keyboard. Power off and boot the previous kernel, whose initrd is left in
 place when wisp is installed, or a rescue medium.
 .SH WHAT IS AND IS NOT INSIDE
-The archive holds the init, the resolved modules of exactly one kernel, the
-completed
+The archive holds the init, the resolved modules of exactly one kernel with
+the firmware files they name (unless
+.BR "firmware = none" ),
+the completed
 .BR wisp.conf (5),
-optionally a volume table, a detached header copy and one key provider with
-its configuration. No firmware files, no network, no splash screen, no resume
-from hibernation, no file system check.
+optionally a console keymap, a module blacklist, a volume table, a detached
+header copy and one key provider with its configuration. The CPU microcode is
+prepended as an uncompressed early cpio (unless
+.BR "microcode = none" ).
+No shell, no network, no splash screen, no resume from hibernation, no file
+system check.
 .SH SUPPORTED LAYOUTS
 LUKS2 (aes-xts, SHA-2 or SHA-3 hashes) holding either the root file system
 directly or one linear logical volume; a root file system without LUKS on a
-plain partition; ext4, xfs and single-device btrfs. Not supported: LUKS1,
-software RAID, multi-device btrfs, LUKS on a logical volume, LVM without LUKS,
+plain partition; ext4, xfs and single-device btrfs mounted without options
+(the default subvolume). Not supported: LUKS1, software RAID, multi-device
+btrfs, a btrfs root that needs
+.B subvol=
+(there are no root mount options), LUKS on a logical volume, LVM without LUKS,
 striped, thin or RAID logical volumes.
 .SH SEE ALSO
 .BR wisp (8),

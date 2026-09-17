@@ -18,8 +18,8 @@ Description: reproducible pure-Go initramfs for encrypted root file systems
  be predicted on another machine. The initramfs holds one static Go binary
  as /init, which finds the hardware without udev, opens LUKS2 without
  cryptsetup, activates a linear logical volume without lvm2, and switches
- to the real root. Nothing is scanned from the running machine at build
- time and nothing is parsed before it is measured at boot time.
+ to the real root. The hardware of the building machine is not scanned and
+ no binaries are collected by following shared libraries.
  .
  wisp replaces initramfs-tools: it writes /boot/initrd.img-<version>, is
  called by the kernel hooks, and answers to update-initramfs.
