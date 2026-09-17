@@ -82,3 +82,29 @@ func TestRootMount(t *testing.T) {
 		t.Fatal("no root mount, no error")
 	}
 }
+
+func TestKindFrom(t *testing.T) {
+	for _, c := range []struct{ name, uuid, table, want, errHas string }{
+		{"cryptsetup sets the UUID", "CRYPT-LUKS2-6eb40e62f79c43bcbeaf4072ffce7abd-dm_crypt-0", "", "crypt", ""},
+		{"lvm2 sets the UUID", "LVM-iv3wXCsV3yUB7wsXDyWJuufKHhl2eUQk", "", "lvm", ""},
+		{"a foreign UUID", "mpath-3600508b4000156d7", "", "", "neither dm-crypt nor LVM"},
+		// A volume activated from a bare table (an init that set no UUID) is judged by its target.
+		{"linear without UUID", "", "0 77447168 linear 252:0 2048\n", "lvm", ""},
+		{"two linear segments without UUID", "", "0 100 linear 252:0 2048\n100 100 linear 252:0 4096\n", "lvm", ""},
+		{"crypt without UUID", "", "0 77453312 crypt aes-xts-plain64 0000 0 253:3 32768\n", "crypt", ""},
+		{"striped without UUID", "", "0 100 striped 2 128 8:1 0 8:2 0\n", "", "neither dm-crypt nor a linear volume"},
+		{"mixed targets without UUID", "", "0 100 linear 252:0 0\n100 100 striped 2 128 8:1 0 8:2 0\n", "", "mixed targets"},
+		{"empty table without UUID", "", "", "", "neither dm-crypt nor a linear volume"},
+	} {
+		got, err := kindFrom("dev", c.uuid, c.table)
+		if c.errHas != "" {
+			if err == nil || !strings.Contains(err.Error(), c.errHas) {
+				t.Errorf("%s: error %v, want %q", c.name, err, c.errHas)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("%s: %q %v, want %q", c.name, got, err, c.want)
+		}
+	}
+}

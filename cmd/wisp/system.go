@@ -177,21 +177,21 @@ func inspectRoot() (*rootLayout, error) {
 		return lay, nil // a plain partition
 	}
 	lay.onDM = true
-	switch {
-	case strings.HasPrefix(info.uuid, "CRYPT-"):
+	kind, err := dmKind(info)
+	if err != nil {
+		return nil, err
+	}
+	if kind == "crypt" {
 		lay.crypt = info
 		return lay, nil
-	case strings.HasPrefix(info.uuid, "LVM-"):
-	default:
-		return nil, fmt.Errorf("root is on device-mapper device %s (%s), which is neither dm-crypt nor LVM", info.name, info.uuid)
 	}
-	out, err := exec.Command("dmsetup", "table", info.name).Output()
+	out, err := dmTable(info.name)
 	if err != nil {
-		return nil, fmt.Errorf("dmsetup table %s: %w (root privileges and the dmsetup package are needed)", info.name, err)
+		return nil, err
 	}
 	var lines []string
 	backing := ""
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		fs := strings.Fields(line)
 		if len(fs) < 5 || fs[2] != "linear" {
 			return nil, fmt.Errorf("root LV %s has a %q segment; only linear volumes over one device are supported", info.name, line)
@@ -204,11 +204,73 @@ func inspectRoot() (*rootLayout, error) {
 		lines = append(lines, strings.ReplaceAll(line, fs[3], "@crypt@"))
 	}
 	crypt, err := dmOf(backing)
-	if err != nil || !strings.HasPrefix(crypt.uuid, "CRYPT-") {
+	if err != nil {
+		return nil, fmt.Errorf("root LV %s does not sit directly on a dm-crypt device (backing %s); LVM without LUKS is not supported yet", info.name, backing)
+	}
+	if k, err := dmKind(crypt); err != nil || k != "crypt" {
 		return nil, fmt.Errorf("root LV %s does not sit directly on a dm-crypt device (backing %s); LVM without LUKS is not supported yet", info.name, backing)
 	}
 	lay.crypt = crypt
 	lay.lvName = info.name
-	lay.lvmTab = "# recorded by wisp build: device-mapper table of the root LV; @crypt@ = the dm-crypt device at boot\nname " + info.name + "\nuuid " + info.uuid + "\n" + strings.Join(lines, "\n") + "\n"
+	lay.lvmTab = "# recorded by wisp build: device-mapper table of the root LV; @crypt@ = the dm-crypt device at boot\nname " + info.name + "\n"
+	if info.uuid != "" {
+		lay.lvmTab += "uuid " + info.uuid + "\n"
+	} else {
+		fmt.Fprintf(os.Stderr, "wisp: the root volume %s has no device-mapper UUID (it was activated by a tool that did not set one); the volume table is recorded without, and lvm2 will not recognise the volume at run time\n", info.name)
+	}
+	lay.lvmTab += strings.Join(lines, "\n") + "\n"
 	return lay, nil
+}
+
+// dmTable runs `dmsetup table`; a variable so that tests can replace it.
+var dmTable = func(name string) (string, error) {
+	out, err := exec.Command("dmsetup", "table", name).Output()
+	if err != nil {
+		return "", fmt.Errorf("dmsetup table %s: %w (root privileges and the dmsetup package are needed)", name, err)
+	}
+	return string(out), nil
+}
+
+// kindFrom classifies a device-mapper device as "crypt" or "lvm". The UUID
+// prefix decides when there is one (cryptsetup and lvm2 always set it). A
+// device without UUID, as a volume activated from a bare table has, is judged
+// by the target of its table: crypt, or linear for a logical volume.
+func kindFrom(name, uuid, table string) (string, error) {
+	switch {
+	case strings.HasPrefix(uuid, "CRYPT-"):
+		return "crypt", nil
+	case strings.HasPrefix(uuid, "LVM-"):
+		return "lvm", nil
+	case uuid != "":
+		return "", fmt.Errorf("root is on device-mapper device %s (%s), which is neither dm-crypt nor LVM", name, uuid)
+	}
+	target := ""
+	for _, line := range strings.Split(strings.TrimSpace(table), "\n") {
+		fs := strings.Fields(line)
+		if len(fs) < 3 {
+			continue
+		}
+		if target != "" && target != fs[2] {
+			return "", fmt.Errorf("root is on device-mapper device %s without UUID and with mixed targets (%s, %s); not supported", name, target, fs[2])
+		}
+		target = fs[2]
+	}
+	switch target {
+	case "crypt":
+		return "crypt", nil
+	case "linear":
+		return "lvm", nil
+	}
+	return "", fmt.Errorf("root is on device-mapper device %s without UUID and with target %q, which is neither dm-crypt nor a linear volume", name, target)
+}
+
+func dmKind(info *dmInfo) (string, error) {
+	if info.uuid != "" {
+		return kindFrom(info.name, info.uuid, "")
+	}
+	table, err := dmTable(info.name)
+	if err != nil {
+		return "", err
+	}
+	return kindFrom(info.name, "", table)
 }
