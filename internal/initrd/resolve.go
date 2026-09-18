@@ -9,14 +9,16 @@ import (
 	"strings"
 
 	"wisp/internal/kmod"
+	"wisp/internal/modtab"
 )
 
 // Resolution is the outcome of Resolve.
 type Resolution struct {
-	Order    []string // module paths relative to the tree, dependency-first, deduplicated
-	Builtin  []string // requested names compiled into the kernel (no file)
-	Missing  []string // requested names that are neither a module nor builtin
-	Firmware []string // firmware file names the emitted modules declare (firmware= in .modinfo), sorted
+	Order    []string        // module paths relative to the tree, dependency-first, deduplicated
+	Builtin  []string        // requested names compiled into the kernel (no file)
+	Missing  []string        // requested names that are neither a module nor builtin
+	Firmware []string        // firmware file names the emitted modules declare (firmware= in .modinfo), sorted
+	Table    []modtab.Module // the emitted modules' key, path, depends=, softdep= and alias=, sorted by key
 }
 
 // Resolve computes the exact set of module files to place in the initrd, in a
@@ -69,26 +71,35 @@ func Resolve(entries []string, tree *kmod.Tree) (*Resolution, error) {
 		}
 	}
 
-	depsCache := map[string][]string{}
+	info := map[string]*modtab.Module{}
 	firmware := map[string]bool{}
+	// deps reads a module's .modinfo once: depends= drives the resolution,
+	// softdep=, alias= and firmware= are recorded for the table and the firmware set.
 	deps := func(key string) ([]string, error) {
-		if d, ok := depsCache[key]; ok {
-			return d, nil
+		if m, ok := info[key]; ok {
+			return m.Depends, nil
 		}
 		elf, err := kmod.Decompress(tree.Path(key))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", tree.Index[key], err)
 		}
-		var out []string
+		m := &modtab.Module{Key: key, Path: tree.Index[key], Aliases: kmod.Aliases(elf)}
 		for _, d := range kmod.Depends(elf) {
-			out = append(out, kmod.Key(d))
+			m.Depends = append(m.Depends, kmod.Key(d))
 		}
-		sort.Strings(out)
-		depsCache[key] = out
+		sort.Strings(m.Depends)
+		pre, post := kmod.Softdep(elf)
+		for _, d := range pre {
+			m.SoftPre = append(m.SoftPre, kmod.Key(d))
+		}
+		for _, d := range post {
+			m.SoftPost = append(m.SoftPost, kmod.Key(d))
+		}
+		info[key] = m
 		for _, f := range kmod.Values(elf, "firmware") {
 			firmware[f] = true
 		}
-		return out, nil
+		return m.Depends, nil
 	}
 
 	res := &Resolution{}
@@ -133,6 +144,10 @@ func Resolve(entries []string, tree *kmod.Tree) (*Resolution, error) {
 		res.Firmware = append(res.Firmware, f)
 	}
 	sort.Strings(res.Firmware)
+	for _, m := range info {
+		res.Table = append(res.Table, *m)
+	}
+	sort.Slice(res.Table, func(i, j int) bool { return res.Table[i].Key < res.Table[j].Key })
 	return res, nil
 }
 

@@ -2,6 +2,13 @@
 
 ## 0.3.0 (2026-09-18)
 
+- The archive carries a module table, `lib/modules/<version>/modules.wisp`: for every module its
+  `depends=`, `softdep=` and `alias=` patterns as the builder read them from the `.modinfo`
+  section, plus the kernel's builtin list. wisp-init reads this one file and no longer opens a
+  module before `finit_module`, so it needs neither the `.modinfo` reader nor the zstd, xz and
+  gzip decompressors (the binary shrinks by about 450 kB) and spends no boot time decompressing
+  thousands of modules. Replaces the pruned `modules.order`. The module vector gained aliases and
+  a softdep, so its bytes changed.
 - Package: an upgrade from one wisp version to the next rebuilds the initramfs of every installed
   kernel; the first installation still builds only the running kernel's, so that an older kernel
   keeps the way back.

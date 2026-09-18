@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"wisp/internal/kmod"
+	"wisp/internal/modtab"
 )
 
 // readCpio is a minimal newc reader for checking our own output.
@@ -217,8 +218,9 @@ func TestManifestFormat(t *testing.T) {
 	}
 }
 
-// makeKo builds a tiny ELF64 module whose .modinfo carries depends= and name=.
-func makeKo(t *testing.T, path, deps string) {
+// makeKo builds a tiny ELF64 module whose .modinfo carries depends= and name=,
+// plus any further fields given as "key=value" (alias=, softdep=, firmware=).
+func makeKo(t *testing.T, path, deps string, extra ...string) {
 	t.Helper()
 	if _, err := exec.LookPath("objcopy"); err != nil {
 		t.Skip("objcopy not installed")
@@ -226,7 +228,11 @@ func makeKo(t *testing.T, path, deps string) {
 	name := strings.TrimSuffix(filepath.Base(path), ".ko")
 	bin := path + ".modinfo"
 	os.MkdirAll(filepath.Dir(path), 0o755)
-	if err := os.WriteFile(bin, []byte("depends="+deps+"\x00name="+name+"\x00license=GPL\x00"), 0o644); err != nil {
+	info := "depends=" + deps + "\x00name=" + name + "\x00license=GPL\x00"
+	for _, e := range extra {
+		info += e + "\x00"
+	}
+	if err := os.WriteFile(bin, []byte(info), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := exec.Command("objcopy", "-I", "binary", "-O", "elf64-x86-64",
@@ -243,12 +249,12 @@ func TestResolveSelectorsAndBuild(t *testing.T) {
 	root := t.TempDir()
 	const ver = "9.9.9-test"
 	mod := filepath.Join(root, ver)
-	mk := func(rp, deps string) { makeKo(t, filepath.Join(mod, rp), deps) }
-	mk("kernel/crypto/aes.ko", "")
+	mk := func(rp, deps string, extra ...string) { makeKo(t, filepath.Join(mod, rp), deps, extra...) }
+	mk("kernel/crypto/aes.ko", "", "alias=crypto-aes")
 	mk("kernel/drivers/base.ko", "")
-	mk("kernel/drivers/char/tpm.ko", "")
-	mk("kernel/drivers/mid.ko", "base")
-	mk("kernel/fs/ext4.ko", "mid")
+	mk("kernel/drivers/char/tpm.ko", "", "alias=acpi*:MSFT0101:*", "alias=of:N*T*Ctcg,tpm-tis-i2c")
+	mk("kernel/drivers/mid.ko", "base", "softdep=pre: aes post: helper")
+	mk("kernel/fs/ext4.ko", "mid", "alias=fs-ext4", "alias=fs-ext3")
 	mk("kernel/fs/netfs.ko", "helper")
 	mk("kernel/drivers/net/helper.ko", "")
 	mk("kernel/drivers/net/e1000.ko", "")
@@ -281,6 +287,17 @@ func TestResolveSelectorsAndBuild(t *testing.T) {
 	if r, _ := Resolve([]string{"nosuch"}, tree); !reflect.DeepEqual(r.Missing, []string{"nosuch"}) {
 		t.Fatalf("missing: %v", r.Missing)
 	}
+	if len(res.Table) != len(want) || res.Table[0].Key != "aes" || res.Table[0].Aliases[0] != "crypto-aes" {
+		t.Fatalf("table: %+v", res.Table)
+	}
+	for _, m := range res.Table {
+		if m.Key == "tpm" && !reflect.DeepEqual(m.Aliases, []string{"acpi*:MSFT0101:*", "of:N*T*Ctcg,tpm-tis-i2c"}) {
+			t.Fatalf("tpm aliases: %v", m.Aliases)
+		}
+		if m.Key == "mid" && (!reflect.DeepEqual(m.SoftPre, []string{"aes"}) || !reflect.DeepEqual(m.SoftPost, []string{"helper"})) {
+			t.Fatalf("mid softdeps: %v %v", m.SoftPre, m.SoftPost)
+		}
+	}
 
 	initPath := filepath.Join(root, "init")
 	os.WriteFile(initPath, []byte("#!/bin/sh\n"), 0o755)
@@ -299,16 +316,23 @@ func TestResolveSelectorsAndBuild(t *testing.T) {
 	if !bytes.Equal(a.Cpio, b.Cpio) {
 		t.Fatal("two builds differ")
 	}
+	// the module table: exactly the emitted modules, their .modinfo as the init
+	// needs it, and the kernel's builtin list (modtab)
+	wantTable := "wisp-modules 1\n" +
+		"builtin\tbuiltin_thing\n" +
+		"module\tbase\tkernel/drivers/base.ko\t\t\t\t\n" +
+		"module\text4\tkernel/fs/ext4.ko\tmid\t\t\tfs-ext4 fs-ext3\n" +
+		"module\tmid\tkernel/drivers/mid.ko\tbase\taes\thelper\t\n"
 	var names []string
 	for _, x := range readCpio(t, a.Cpio) {
 		names = append(names, x.name)
-		if x.name == "lib/modules/"+ver+"/modules.order" && string(x.data) != "kernel/drivers/base.ko\nkernel/drivers/mid.ko\nkernel/fs/ext4.ko\n" {
-			t.Fatalf("modules.order: %q", x.data)
+		if x.name == "lib/modules/"+ver+"/"+modtab.Name && string(x.data) != wantTable {
+			t.Fatalf("%s:\n%s\nwant:\n%s", modtab.Name, x.data, wantTable)
 		}
 	}
 	wantNames := []string{"dev", "etc", "init", "lib", "lib/modules", "lib/modules/" + ver, "lib/modules/" + ver + "/kernel",
 		"lib/modules/" + ver + "/kernel/drivers", "lib/modules/" + ver + "/kernel/drivers/base.ko", "lib/modules/" + ver + "/kernel/drivers/mid.ko",
-		"lib/modules/" + ver + "/kernel/fs", "lib/modules/" + ver + "/kernel/fs/ext4.ko", "lib/modules/" + ver + "/modules.order",
+		"lib/modules/" + ver + "/kernel/fs", "lib/modules/" + ver + "/kernel/fs/ext4.ko", "lib/modules/" + ver + "/" + modtab.Name,
 		"lib64", "proc", "run", "sys"}
 	if !reflect.DeepEqual(names, wantNames) {
 		t.Fatalf("archive members\n got %v\nwant %v", names, wantNames)

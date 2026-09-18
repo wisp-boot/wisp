@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"wisp/internal/modtab"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
@@ -40,22 +41,8 @@ func IsKo(name string) bool {
 	return false
 }
 
-// Key returns the canonical module key of a path: the basename without the
-// .ko* suffix, with '-' replaced by '_'. Kernel module names use underscores,
-// while file names and depends= fields use hyphens.
-func Key(relpath string) string {
-	b := relpath
-	if i := strings.LastIndexByte(b, '/'); i >= 0 {
-		b = b[i+1:]
-	}
-	for _, e := range Exts {
-		if strings.HasSuffix(b, e) {
-			b = b[:len(b)-len(e)]
-			break
-		}
-	}
-	return strings.ReplaceAll(b, "-", "_")
-}
+// Key returns the canonical module key of a path: see modtab.Key.
+func Key(relpath string) string { return modtab.Key(relpath) }
 
 // Decompress returns the raw ELF bytes of a possibly compressed module.
 func Decompress(path string) ([]byte, error) {

@@ -23,7 +23,9 @@ to reach a shell through.
 2. Coldplug: read every `modalias` under `/sys/devices`, match it against the alias patterns of
    the modules in the archive (the kernel's own fnmatch semantics), load the matches with their
    dependencies, repeat until a round loads nothing new. Fallbacks: all storage modules if the
-   container has not appeared, all input modules if there is no input device.
+   container has not appeared, all input modules if there is no input device. The patterns and
+   dependencies come from the module table `modules.wisp` the builder placed next to the
+   modules; the init never opens a module file, the kernel decompresses it in `finit_module`.
 3. Wait for the LUKS2 container with the configured UUID.
 4. Obtain the key: `none`, `passphrase`, `credential`, or a key provider process.
 5. Recover the volume key from a keyslot and create the dm-crypt mapping through the
@@ -131,7 +133,8 @@ linux-firmware, amd64-microcode and intel-microcode, and run
 byte-identical; `wisp build` prints their SHA-256. The manifest does not record package versions
 yet: which versions went in is for the two sides to agree on. The module resolution reads
 each module's own `.modinfo` section and never `modules.dep`, so it does not depend on the
-depmod version of either machine.
+depmod version of either machine; the module table in the archive is derived from the same
+fields, so it is part of the reproduced bytes.
 
 Releases are built with `GOFLAGS=-mod=vendor -trimpath`, `CGO_ENABLED=0` and
 `-ldflags "-s -w -buildid="` from the vendored dependencies; with the same Go toolchain the
@@ -156,7 +159,8 @@ network root. Unsupported layouts are rejected by `wisp build`, before a reboot.
 ```
 cmd/wisp-init/     the /init: coldplug, key sources, LUKS, volumes, root, switch_root
 cmd/wisp/          the builder, update-initramfs facade and kernel hooks
-internal/kmod/     .modinfo reader and module decompression (zstd, xz, gzip) in pure Go
+internal/kmod/     .modinfo reader and module decompression (zstd, xz, gzip) in pure Go (builder only)
+internal/modtab/   the module table modules.wisp: what the init knows about the modules
 internal/initrd/   manifest, deterministic cpio, module resolution, build
 internal/luks/     LUKS2 volume-key recovery and device-mapper ioctls
 tools/             mkkeymaps.sh: precompiles the console keymaps at package build

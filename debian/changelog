@@ -3,6 +3,9 @@ wisp (0.3.0) unstable; urgency=medium
   * An upgrade from one wisp version to the next rebuilds the initramfs of
     every installed kernel; the first installation still builds only the
     running kernel's.
+  * The archive carries a module table (modules.wisp); wisp-init reads it
+    instead of decompressing every module for its .modinfo, and drops the
+    decompressors.
 
  -- Richard Robert Reitz <reitzrobert77@gmail.com>  Fri, 18 Sep 2026 01:15:00 +0200
 

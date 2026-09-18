@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"wisp/internal/kmod"
+	"wisp/internal/modtab"
 )
 
 var update = flag.Bool("update", false, "regenerate the vectors under ../../vectors")
@@ -74,12 +75,12 @@ func TestVectorModules(t *testing.T) {
 	mod := filepath.Join(dir, ver)
 	if *update {
 		os.RemoveAll(mod)
-		mk := func(rp, deps string) { makeKo(t, filepath.Join(mod, rp), deps) }
-		mk("kernel/crypto/aes.ko", "")
+		mk := func(rp, deps string, extra ...string) { makeKo(t, filepath.Join(mod, rp), deps, extra...) }
+		mk("kernel/crypto/aes.ko", "", "alias=crypto-aes")
 		mk("kernel/drivers/base.ko", "")
-		mk("kernel/drivers/char/tpm.ko", "")
-		mk("kernel/drivers/mid.ko", "base")
-		mk("kernel/fs/ext4.ko", "mid")
+		mk("kernel/drivers/char/tpm.ko", "", "alias=acpi*:MSFT0101:*", "alias=of:N*T*Ctcg,tpm-tis-i2c")
+		mk("kernel/drivers/mid.ko", "base", "softdep=pre: aes post: helper")
+		mk("kernel/fs/ext4.ko", "mid", "alias=fs-ext4", "alias=fs-ext3")
 		mk("kernel/fs/netfs.ko", "helper")
 		mk("kernel/drivers/net/helper.ko", "")
 		mk("kernel/drivers/net/e1000.ko", "")
@@ -99,6 +100,7 @@ func TestVectorModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeOrCompare(t, filepath.Join(dir, "expected.order"), []byte(strings.Join(res.Order, "\n")+"\n"))
+	writeOrCompare(t, filepath.Join(dir, "expected.modules.wisp"), (&modtab.Table{Modules: res.Table, Builtin: []string{"builtin_thing"}}).Marshal())
 	built, err := Build(m, dir)
 	if err != nil {
 		t.Fatal(err)

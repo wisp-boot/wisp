@@ -3,7 +3,6 @@
 package initrd
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"wisp/internal/kmod"
+	"wisp/internal/modtab"
 )
 
 // Result is a built initrd.
@@ -41,8 +41,9 @@ func (r *Result) SHA256() string {
 // The archive contains: the empty directories proc, sys, dev, etc, run; the
 // resolved modules copied verbatim under lib/modules/<kernel>/ (never
 // stripped or recompressed, that would break bit-reproducibility against the
-// package); a pruned modules.order listing exactly the emitted set in load
-// order; and the declared [files]. The [cmdline] is not placed in the
+// package); the module table modules.wisp (modtab) with the emitted modules'
+// depends=, softdep= and alias= and the kernel's builtin list; and the
+// declared [files]. The [cmdline] is not placed in the
 // archive: the kernel receives it from the boot entry and the initrd reads
 // /proc/cmdline.
 func Build(m *Manifest, modulesRoot string) (*Result, error) {
@@ -78,11 +79,14 @@ func Build(m *Manifest, modulesRoot string) (*Result, error) {
 			return nil, err
 		}
 	}
-	var order bytes.Buffer
-	for _, rp := range res.Order {
-		order.WriteString(rp + "\n")
+	// the module table: what the init needs to know about these modules
+	// without opening one (modtab); the kernel's whole builtin list, so that a
+	// depends= on a builtin module is recognised as satisfied
+	tab := modtab.Table{Modules: res.Table}
+	for k := range tree.Builtin {
+		tab.Builtin = append(tab.Builtin, k)
 	}
-	if err := t.AddFile(modBase+"/modules.order", order.Bytes(), false); err != nil {
+	if err := t.AddFile(modBase+"/"+modtab.Name, tab.Marshal(), false); err != nil {
 		return nil, err
 	}
 	result := &Result{Resolution: res}

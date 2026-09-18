@@ -22,7 +22,10 @@ archive (the kernel's own fnmatch semantics), load the matches with their
 dependencies, and repeat until a round loads nothing new, because a bus driver
 makes its children appear. If the LUKS container has not appeared, every
 storage module in the archive is loaded; if no input device exists, every HID
-and input module.
+and input module. Patterns and dependencies come from the module table
+.I modules.wisp
+the builder placed next to the modules; the init opens no module file, the
+kernel decompresses it in finit_module.
 .IP 3. 4
 Wait for the LUKS2 container with the configured UUID, up to 30 seconds.
 .IP 4. 4
@@ -46,7 +49,7 @@ the keyboard. Power off and boot the previous kernel, whose initrd is left in
 place when wisp is installed, or a rescue medium.
 .SH WHAT IS AND IS NOT INSIDE
 The archive holds the init, the resolved modules of exactly one kernel with
-the firmware files they name (unless
+their module table and the firmware files they name (unless
 .BR "firmware = none" ),
 the completed
 .BR wisp.conf (5),

@@ -4,15 +4,18 @@ package main
 
 // Step 2: coldplug without udev, kmod or depmod. A tiny device manager:
 //
-//  1. index the module tree     /lib/modules/<version>: key -> relpath, a cheap file scan
-//  2. alias table               decompress each module once, read its alias= patterns
-//  3. always load               dm_mod and dm_crypt (LUKS) with their depends=, dependency-first
-//  4. coldplug rounds           read every modalias under /sys/devices, match it against all
+//  1. module table              lib/modules/<version>/modules.wisp, written by the builder from
+//                               the modules' .modinfo (modtab): key, path, depends=, softdep=,
+//                               alias= patterns, and the kernel's builtin list. The init never
+//                               opens a module file itself; finit_module hands the compressed
+//                               file to the kernel.
+//  2. always load               dm_mod and dm_crypt (LUKS) with their depends=, dependency-first
+//  3. coldplug rounds           read every modalias under /sys/devices, match it against all
 //                               alias patterns with fnmatch semantics, load the hits (+ depends=).
 //                               Then scan /sys again: loading a bus driver (xhci) makes its
 //                               children (USB keyboard, USB stick) appear. Repeat with a short
 //                               settle pause until a round loads nothing new.
-//  5. fallbacks                 if the LUKS container has not appeared, load every module of the
+//  4. fallbacks                 if the LUKS container has not appeared, load every module of the
 //                               storage subtrees; if no input device exists, load the HID and input
 //                               subtrees. Then one more matching round for the children.
 //
@@ -27,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"wisp/internal/kmod"
 	"wisp/internal/luks"
+	"wisp/internal/modtab"
 
 	"golang.org/x/sys/unix"
 )
@@ -51,36 +54,52 @@ var inputSubtrees = []string{
 	"kernel/drivers/usb",
 }
 
-type modInfo struct {
-	aliases  []string
-	depends  []string // canonical keys
-	softPre  []string
-	softPost []string
-}
-
 type aliasEntry struct {
 	pattern string
 	key     string
 }
 
-// modTree is the indexed module tree plus a lazy cache of each module's .modinfo.
+// modTree is the module table of this initrd, indexed by key.
 type modTree struct {
-	*kmod.Tree
-	info      map[string]modInfo
-	params    map[string]string // module key -> parameters from the kernel command line
-	blacklist map[string]bool   // keys never loaded on an alias match (/etc/wisp/modules.blacklist)
+	Dir       string                    // /lib/modules/<version>
+	Index     map[string]string         // key -> path relative to Dir
+	Builtin   map[string]bool           // keys compiled into the kernel (no file)
+	info      map[string]*modtab.Module // key -> record
+	params    map[string]string         // module key -> parameters from the kernel command line
+	blacklist map[string]bool           // keys never loaded on an alias match (/etc/wisp/modules.blacklist)
 }
 
-func newModTree() *modTree {
+// newModTree reads the module table. A missing or malformed table halts: this
+// archive was not built by a wisp that writes one, and loading modules by
+// guesswork is not what a measured initrd does. A table without modules (a
+// kernel with everything built in) is fine.
+func newModTree(con *Console) *modTree {
 	var uts unix.Utsname
 	unix.Uname(&uts)
 	dir := filepath.Join("/lib/modules", unix.ByteSliceToString(uts.Release[:]))
 	cl, _ := os.ReadFile("/proc/cmdline")
-	t := &modTree{Tree: kmod.Load(dir), info: map[string]modInfo{}, params: moduleParams(string(cl)), blacklist: map[string]bool{}}
+	t := &modTree{Dir: dir, Index: map[string]string{}, Builtin: map[string]bool{},
+		info: map[string]*modtab.Module{}, params: moduleParams(string(cl)), blacklist: map[string]bool{}}
+	b, err := os.ReadFile(filepath.Join(dir, modtab.Name))
+	if err != nil {
+		halt(con, "%s: %v (the builder places this table; is the initrd built for kernel %s?)", modtab.Name, err, filepath.Base(dir))
+	}
+	tab, err := modtab.Parse(b)
+	if err != nil {
+		halt(con, "%v", err)
+	}
+	for i := range tab.Modules {
+		m := &tab.Modules[i]
+		t.Index[m.Key] = m.Path
+		t.info[m.Key] = m
+	}
+	for _, k := range tab.Builtin {
+		t.Builtin[k] = true
+	}
 	if b, err := os.ReadFile(blacklistPath); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
-				t.blacklist[kmod.Key(line)] = true
+				t.blacklist[modtab.Key(line)] = true
 			}
 		}
 	}
@@ -92,31 +111,23 @@ func newModTree() *modTree {
 // still loads as a dependency of something else.
 const blacklistPath = "/etc/wisp/modules.blacklist"
 
-func (t *modTree) infoFor(key string) modInfo {
-	if mi, ok := t.info[key]; ok {
-		return mi
+// Path returns the absolute path of a module key, or "" if it is not a file.
+func (t *modTree) Path(key string) string {
+	rel, ok := t.Index[key]
+	if !ok {
+		return ""
 	}
-	var mi modInfo
-	if p := t.Path(key); p != "" {
-		if elf, err := kmod.Decompress(p); err == nil {
-			mi.aliases = kmod.Aliases(elf)
-			for _, d := range kmod.Depends(elf) {
-				mi.depends = append(mi.depends, kmod.Key(d))
-			}
-			pre, post := kmod.Softdep(elf)
-			for _, d := range pre {
-				mi.softPre = append(mi.softPre, kmod.Key(d))
-			}
-			for _, d := range post {
-				mi.softPost = append(mi.softPost, kmod.Key(d))
-			}
-		}
-	}
-	t.info[key] = mi
-	return mi
+	return filepath.Join(t.Dir, filepath.FromSlash(rel))
 }
 
-// aliasTable reads the alias= patterns of every module (each decompressed once).
+func (t *modTree) infoFor(key string) *modtab.Module {
+	if m, ok := t.info[key]; ok {
+		return m
+	}
+	return &modtab.Module{Key: key}
+}
+
+// aliasTable lists the alias= patterns of every module in the table.
 // Sorted by key so that, with several hits, the same module always loads first.
 func (t *modTree) aliasTable() []aliasEntry {
 	keys := make([]string, 0, len(t.Index))
@@ -126,7 +137,7 @@ func (t *modTree) aliasTable() []aliasEntry {
 	sort.Strings(keys)
 	var out []aliasEntry
 	for _, k := range keys {
-		for _, pat := range t.infoFor(k).aliases {
+		for _, pat := range t.infoFor(k).Aliases {
 			out = append(out, aliasEntry{pattern: pat, key: k})
 		}
 	}
@@ -150,12 +161,12 @@ func (t *modTree) loadRec(con *Console, key string, loaded, inProgress map[strin
 	inProgress[key] = true
 	n := 0
 	info := t.infoFor(key)
-	deps := append([]string(nil), info.depends...)
+	deps := append([]string(nil), info.Depends...)
 	sort.Strings(deps)
 	for _, d := range deps {
 		n += t.loadRec(con, d, loaded, inProgress)
 	}
-	for _, d := range info.softPre { // best effort, before the module
+	for _, d := range info.SoftPre { // best effort, before the module
 		n += t.loadRec(con, d, loaded, inProgress)
 	}
 	delete(inProgress, key)
@@ -166,7 +177,7 @@ func (t *modTree) loadRec(con *Console, key string, loaded, inProgress map[strin
 		con.Say("wisp-init: module %s: %v", t.Index[key], err)
 	}
 	loaded[key] = true
-	for _, d := range info.softPost { // best effort, after the module
+	for _, d := range info.SoftPost { // best effort, after the module
 		n += t.loadRec(con, d, loaded, inProgress)
 	}
 	return n + 1
@@ -232,9 +243,9 @@ func haveInputDevice() bool {
 }
 
 func coldplug(con *Console, c config) {
-	t := newModTree()
+	t := newModTree(con)
 	if len(t.Index) == 0 {
-		con.Say("wisp-init: no module tree under %s, coldplug skipped", t.Dir)
+		con.Say("wisp-init: no modules in this initrd, coldplug skipped")
 		return
 	}
 	loaded := map[string]bool{}
