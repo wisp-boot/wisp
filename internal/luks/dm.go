@@ -9,6 +9,7 @@ package luks
 // _IOWR(0xfd, cmd, 312). Needs root.
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -127,8 +128,8 @@ func targetBlob(start, length uint64, ttype, params string) []byte {
 		specLen = dmSpecSz + len(p)
 	}
 	b := make([]byte, specLen)
-	le := func(off int, v uint64) { *(*uint64)(unsafe.Pointer(&b[off])) = v }
-	le32 := func(off int, v uint32) { *(*uint32)(unsafe.Pointer(&b[off])) = v }
+	le := func(off int, v uint64) { binary.LittleEndian.PutUint64(b[off:], v) }
+	le32 := func(off int, v uint32) { binary.LittleEndian.PutUint32(b[off:], v) }
 	le(0, start)              // sector_start
 	le(8, length)             // length
 	le32(16, 0)               // status
@@ -141,7 +142,7 @@ func targetBlob(start, length uint64, ttype, params string) []byte {
 func dmIoctl(ctrl *os.File, req uintptr, name, uuid string, targetCount uint32, flags uint32, targets []byte) error {
 	total := dmIoctlSz + len(targets)
 	buf := make([]byte, total)
-	le32 := func(off int, v uint32) { *(*uint32)(unsafe.Pointer(&buf[off])) = v }
+	le32 := func(off int, v uint32) { binary.LittleEndian.PutUint32(buf[off:], v) }
 	le32(0, dmVersionMajor) // version[3]
 	le32(4, 0)
 	le32(8, 0)
