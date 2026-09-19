@@ -33,6 +33,10 @@ const (
 	afStripes  = 4000 // LUKS requires exactly 4000 anti-forensic stripes
 	slotSector = 512  // sector size of the keyslot area
 	maxKeySize = 4096 // bound against a manipulated header: key_size * 4000 sizes the allocation
+	// maxArgon2Memory bounds kdf.memory (KiB) from the header: cryptsetup never
+	// asks for more than 4 GiB, and above it a manipulated header would only
+	// exhaust memory before the passphrase is even checked.
+	maxArgon2Memory = 4 << 20
 )
 
 // ErrNoKeyslot: no keyslot opened with the given secret (wrong passphrase or key).
@@ -241,9 +245,16 @@ func deriveKey(kdf jsonKdf, secret []byte, keyLen int) ([]byte, error) {
 			return nil, fmt.Errorf("luks: unknown kdf hash %q", kdf.Hash)
 		}
 		return pbkdf2.Key(secret, salt, int(kdf.Iterations), keyLen, h), nil
-	case "argon2i":
-		return argon2.Key(secret, salt, uint32(kdf.Time), uint32(kdf.Memory), uint8(kdf.Cpus), uint32(keyLen)), nil
-	case "argon2id":
+	case "argon2i", "argon2id":
+		// The header is unauthenticated input: x/crypto/argon2 panics on
+		// time 0 or cpus 0, and memory is an allocation the header dictates.
+		// Refuse before calling, with a reason, instead of dying as PID 1.
+		if kdf.Time == 0 || kdf.Cpus == 0 || kdf.Cpus > 255 || kdf.Memory == 0 || kdf.Memory > maxArgon2Memory {
+			return nil, fmt.Errorf("luks: argon2 parameters out of range (time %d, memory %d KiB, cpus %d)", kdf.Time, kdf.Memory, kdf.Cpus)
+		}
+		if kdf.Type == "argon2i" {
+			return argon2.Key(secret, salt, uint32(kdf.Time), uint32(kdf.Memory), uint8(kdf.Cpus), uint32(keyLen)), nil
+		}
 		return argon2.IDKey(secret, salt, uint32(kdf.Time), uint32(kdf.Memory), uint8(kdf.Cpus), uint32(keyLen)), nil
 	default:
 		return nil, fmt.Errorf("luks: unknown kdf type %q", kdf.Type)

@@ -47,6 +47,13 @@ func main() {
 	os.Setenv("PATH", "/usr/sbin:/usr/bin:/sbin:/bin") // the kernel starts /init without an environment
 	mountPseudoFS()                                    // 1
 	con := openConsole()
+	// A panic in PID 1 ends as a kernel panic with a Go stack trace scrolling
+	// by. Turn it into the same halt as every other failure, with the reason.
+	defer func() {
+		if r := recover(); r != nil {
+			halt(con, "internal error: %v", r)
+		}
+	}()
 	cfg := loadConfig(con) // measured wisp.conf first, kernel command line as fallback
 	applyKeymap(con)       // 1b: before any prompt
 	con.Say("=== wisp-init %s, kernel %s, key=%s ===", version, kernelRelease(), cfg.key)
