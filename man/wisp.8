@@ -107,6 +107,12 @@ the default is the newest installed kernel;
 selects the boot directory.
 .B \-t
 is accepted and ignored. Unknown options are an error.
+.TP
+.BI "luks-tab " device|header
+Print the LUKS table
+.B build
+places at /etc/wisp/luks.tab for this container (see
+.BR wisp.conf (5)).
 .SH FILES
 .TP
 .I /etc/wisp/wisp.conf

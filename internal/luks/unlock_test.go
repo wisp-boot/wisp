@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-package luks
+package luks_test
 
 // Correctness gate: our pure-Go Recover against the real cryptsetup.
 // luksFormat creates a LUKS2 container (argon2id, aes-xts-plain64, sha256) on
@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wisp/internal/luks"
 )
 
 func needCryptsetup(t *testing.T) {
@@ -76,7 +78,7 @@ func TestRecoverMatchesCryptsetup(t *testing.T) {
 	if len(ref) == 0 {
 		t.Fatal("cryptsetup returned an empty volume key")
 	}
-	v, err := Recover(img, img, []byte(pw))
+	v, err := recover(t, img, img, []byte(pw))
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
@@ -99,8 +101,8 @@ func TestRecoverWrongPassphrase(t *testing.T) {
 		t.Fatal(err)
 	}
 	formatLuks2(t, img, "right")
-	if _, err := Recover(img, img, []byte("wrong")); !errors.Is(err, ErrNoKeyslot) {
-		t.Fatalf("wrong passphrase: err=%v, want ErrNoKeyslot", err)
+	if _, err := recover(t, img, img, []byte("wrong")); !errors.Is(err, luks.ErrNoKeyslot) {
+		t.Fatalf("wrong passphrase: err=%v, want luks.ErrNoKeyslot", err)
 	}
 }
 
@@ -114,7 +116,7 @@ func TestRecoverSha512Hash(t *testing.T) {
 	const pw = "second test"
 	formatLuks2(t, img, pw, "--hash", "sha512", "--cipher", "aes-xts-plain64", "--key-size", "512")
 	ref := refVolumeKey(t, img, pw)
-	v, err := Recover(img, img, []byte(pw))
+	v, err := recover(t, img, img, []byte(pw))
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
@@ -147,14 +149,14 @@ func TestMapCryptRoot(t *testing.T) {
 	loop := strings.TrimSpace(string(out))
 	defer exec.Command("losetup", "-d", loop).Run()
 
-	v, err := Recover(loop, loop, []byte(pw))
+	v, err := recover(t, loop, loop, []byte(pw))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(v.MasterKey)
 
 	const our = "wisp-luks-test-ours"
-	if err := MapCrypt(our, loop, v); err != nil {
+	if err := luks.MapCrypt(our, loop, v); err != nil {
 		t.Fatalf("MapCrypt: %v", err)
 	}
 	defer exec.Command("dmsetup", "remove", our).Run()

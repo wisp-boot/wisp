@@ -29,11 +29,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"syscall"
 
 	"wisp/internal/luks"
+	"wisp/internal/lukstab"
 )
 
 const (
@@ -43,7 +43,20 @@ const (
 	maxKeyLen      = 512
 )
 
-var providerName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+// validProviderName is the builder's providerName regexp, ^[a-z][a-z0-9_-]{0,31}$,
+// as a loop: regexp would cost the init a quarter megabyte for one check.
+func validProviderName(s string) bool {
+	if len(s) == 0 || len(s) > 32 || s[0] < 'a' || s[0] > 'z' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
 
 // obtainKey returns the secret that opens the container. For key=passphrase
 // it returns nil: the passphrase dialogue happens in openLUKS, because a
@@ -66,7 +79,7 @@ func obtainKey(con *Console, c config, luksDev string) []byte {
 		con.Say("wisp-init: key from credential (%d bytes)", len(b))
 		return b
 	}
-	if !providerName.MatchString(c.key) {
+	if !validProviderName(c.key) {
 		halt(con, "wisp.conf: key=%q is not a valid provider name", c.key)
 	}
 	return runProvider(con, c, luksDev)
@@ -154,8 +167,21 @@ func openLUKS(con *Console, c config, dev string, key []byte) {
 		}
 		hdr = c.luksHeader
 	}
+	// The table the builder wrote from the header (measured); the header on
+	// the device is hashed and compared, never parsed here.
+	tb, err := os.ReadFile(lukstab.Path)
+	if err != nil {
+		halt(con, "%s: %v (the builder writes this table from the LUKS header; rebuild the initramfs)", lukstab.Path, err)
+	}
+	tab, err := lukstab.Parse(tb)
+	if err != nil {
+		halt(con, "%v", err)
+	}
+	if err := luks.CheckHeader(hdr, tab); err != nil {
+		halt(con, "%v", err)
+	}
 	if key != nil {
-		v, err := luks.Recover(hdr, dev, key)
+		v, err := luks.Recover(tab, hdr, dev, key)
 		if err != nil {
 			halt(con, "LUKS: %v", err)
 		}
@@ -164,7 +190,7 @@ func openLUKS(con *Console, c config, dev string, key []byte) {
 	}
 	for i := 0; i < 3; i++ {
 		pw := con.Secret("Passphrase for " + strings.TrimPrefix(dev, "/dev/") + ": ")
-		v, err := luks.Recover(hdr, dev, []byte(pw))
+		v, err := luks.Recover(tab, hdr, dev, []byte(pw))
 		if errors.Is(err, luks.ErrNoKeyslot) {
 			con.Say("wisp-init: wrong passphrase")
 			continue

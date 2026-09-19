@@ -6,6 +6,9 @@ wisp (0.3.0) unstable; urgency=medium
   * The archive carries a module table (modules.wisp); wisp-init reads it
     instead of decompressing every module for its .modinfo, and drops the
     decompressors.
+  * The LUKS2 header is parsed at build time into /etc/wisp/luks.tab;
+    wisp-init only hashes the header and compares. Rebuild the initramfs
+    after changing the header (luksAddKey, luksChangeKey, ...).
 
  -- Richard Robert Reitz <reitzrobert77@gmail.com>  Fri, 18 Sep 2026 01:15:00 +0200
 

@@ -131,8 +131,14 @@ func HeaderDigest(dev string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return DigestOf(js), nil
+}
+
+// DigestOf is SHA-256 of a JSON area, as HeaderDigest and the builder's
+// table compute it.
+func DigestOf(js []byte) []byte {
 	d := sha256.Sum256(js)
-	return d[:], nil
+	return d[:]
 }
 
 // FindAll lists every LUKS2 block device.

@@ -48,3 +48,15 @@ func TestReadKey(t *testing.T) {
 		t.Fatalf("read error: %v %v", got, err)
 	}
 }
+
+func TestValidProviderName(t *testing.T) {
+	for in, want := range map[string]bool{
+		"tpm": true, "a": true, "barrier-2": true, "x_y": true, "a0123456789012345678901234567890": true,
+		"": false, "Tpm": false, "1tpm": false, "tpm.x": false, "tp m": false, "../x": false,
+		"a01234567890123456789012345678901": false,
+	} {
+		if got := validProviderName(in); got != want {
+			t.Errorf("validProviderName(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

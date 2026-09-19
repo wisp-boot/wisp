@@ -35,9 +35,13 @@ in
 .BR wisp.conf (5):
 none, passphrase, credential, or a key provider process.
 .IP 5. 4
-Recover the volume key from a keyslot in pure Go and create the dm-crypt
-mapping through the device-mapper ioctl. If a volume table was recorded,
-replay it over the dm-crypt device to activate the root logical volume.
+Hash the header's JSON area and compare it with the measured table
+.I /etc/wisp/luks.tab
+the builder wrote from it; a changed header halts with a message. Then
+recover the volume key from a keyslot in pure Go, as the table describes,
+and create the dm-crypt mapping through the device-mapper ioctl. The init
+does not parse the header. If a volume table was recorded, replay it over
+the dm-crypt device to activate the root logical volume.
 .IP 6. 4
 Find the root file system by UUID or path and mount it read-only.
 .IP 7. 4
@@ -53,8 +57,9 @@ their module table and the firmware files they name (unless
 .BR "firmware = none" ),
 the completed
 .BR wisp.conf (5),
-optionally a console keymap, a module blacklist, a volume table, a detached
-header copy and one key provider with its configuration. The CPU microcode is
+the LUKS table when the root is encrypted, optionally a console keymap, a
+module blacklist, a volume table, a detached header copy and one key
+provider with its configuration. The CPU microcode is
 prepended as an uncompressed early cpio (unless
 .BR "microcode = none" ).
 No shell, no network, no splash screen, no resume from hibernation, no file

@@ -2,6 +2,17 @@
 
 ## 0.3.0 (2026-09-18)
 
+- The LUKS2 header is parsed by the builder, not by the init. `wisp build` reads the header of
+  the container (or the detached header) and writes `/etc/wisp/luks.tab`: keyslots, digests and
+  segments with every parameter checked against the bounds the init enforces, plus the SHA-256 of
+  the header's JSON area. wisp-init hashes the header on the device, compares, and recovers the
+  key from the table; `encoding/json` is gone from the init, and the only bytes an attacker can
+  write that the init still parses are the 4 KiB binary head (magic, version, size, UUID) and the
+  superblock probe. The price: after `luksAddKey`, `luksChangeKey`, `luksKillSlot` or a changed
+  PBKDF the initramfs must be rebuilt, or the boot halts with a message saying so. New verb
+  `wisp luks-tab`, new vector `vectors/luks/expected.luks.tab`.
+- wisp-init checks the provider name with a loop instead of `regexp`, which cost a quarter
+  megabyte of binary for one check.
 - The archive carries a module table, `lib/modules/<version>/modules.wisp`: for every module its
   `depends=`, `softdep=` and `alias=` patterns as the builder read them from the `.modinfo`
   section, plus the kernel's builtin list. wisp-init reads this one file and no longer opens a

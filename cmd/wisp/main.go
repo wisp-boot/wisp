@@ -30,6 +30,8 @@ func usage() {
              print the manifest build would use; with --stage also write the generated files there
   resolve    [-k <version>] <module|+dir:...|-dir:...>...
              show the module resolution against /lib/modules/<version>
+  luks-tab   <device|header file>
+             print the LUKS table build places at /etc/wisp/luks.tab for this container
   update-initramfs  -c|-u|-d [-k <version>|all] [-b <dir>] [-v]
              initramfs-tools compatible facade (also reachable as update-initramfs)
   version
@@ -60,6 +62,8 @@ func main() {
 		os.Exit(cmdManifest(args))
 	case "resolve":
 		os.Exit(cmdResolve(args))
+	case "luks-tab":
+		os.Exit(cmdLuksTab(args))
 	case "update-initramfs":
 		os.Exit(updateInitramfs(args))
 	case "version", "--version", "-v":

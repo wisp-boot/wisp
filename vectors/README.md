@@ -35,4 +35,7 @@ reduced metadata and keyslot areas) formatted by cryptsetup with the passphrase 
 `passphrase.txt`. `master-key.hex` is the volume key cryptsetup dumped for it;
 `segment.txt` lists encryption, sector size, data offset and size. A volume-key recovery
 must yield exactly `master-key.hex` from the image and the passphrase, and must reject
-`wrong-passphrase.txt`.
+`wrong-passphrase.txt`. `expected.luks.tab` is the table a builder derives from the header
+(format 1: the SHA-256 of the JSON area and the UUID, then the crypt segments, the digests and
+the luks2 keyslots, tab-separated, ids in numeric order, salts and digests in hex); an init
+recovers the key from this table alone and only hashes the header to compare.

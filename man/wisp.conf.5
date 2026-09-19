@@ -150,6 +150,17 @@ the root file system is a linear logical volume directly over the dm-crypt
 device. Any other topology (several physical volumes, striped, thin, RAID,
 LVM without LUKS) is rejected at build time. After resizing the root volume,
 rebuild the initramfs.
+.SS /etc/wisp/luks.tab
+Written by the builder from the LUKS2 header of the container named by
+.BR luks.uuid " (or " luks.header ):
+its keyslots, digests and crypt segments, and the SHA-256 of the header's
+JSON area. wisp-init reads this table and hashes the header on the device
+to compare; it never parses the header. A header that changed since the
+build (luksAddKey, luksChangeKey, luksKillSlot, luksConvert, a changed PBKDF)
+halts the boot with a message that says so. Rebuild the initramfs after any
+such change. The container must be present at build time.
+.B wisp luks-tab
+prints the table for a device or header file.
 .SH KEY PROVIDERS
 A key provider is an executable
 .IR /usr/lib/wisp/key/ name

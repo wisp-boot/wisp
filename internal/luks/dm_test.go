@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-package luks
+package luks_test
 
 // Correctness gate for the linear volume tables: our MapTable against the
 // real LVM. An LV is created with lvm2 on a loop PV and filled with a
@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"wisp/internal/luks"
 )
 
 func TestMapTableLinearAgainstLVM(t *testing.T) {
@@ -71,7 +73,7 @@ func TestMapTableLinearAgainstLVM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dmsetup table: %v\n%s", err, tblOut)
 	}
-	var targets []Target
+	var targets []luks.Target
 	for _, line := range strings.Split(strings.TrimSpace(string(tblOut)), "\n") {
 		fs := strings.Fields(line)
 		if len(fs) < 4 || fs[2] != "linear" {
@@ -79,11 +81,11 @@ func TestMapTableLinearAgainstLVM(t *testing.T) {
 		}
 		start, _ := strconv.ParseUint(fs[0], 10, 64)
 		length, _ := strconv.ParseUint(fs[1], 10, 64)
-		targets = append(targets, Target{Start: start, Length: length, Type: "linear", Params: strings.Join(fs[3:], " ")})
+		targets = append(targets, luks.Target{Start: start, Length: length, Type: "linear", Params: strings.Join(fs[3:], " ")})
 	}
 
 	const our = "wisp-lvm-test-ours"
-	if err := MapTable(our, "", targets); err != nil {
+	if err := luks.MapTable(our, "", targets); err != nil {
 		t.Fatalf("MapTable: %v", err)
 	}
 	defer exec.Command("dmsetup", "remove", our).Run()

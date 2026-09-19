@@ -29,6 +29,9 @@ import (
 
 	"wisp/internal/initrd"
 	"wisp/internal/kmod"
+	"wisp/internal/luks"
+	"wisp/internal/luksmeta"
+	"wisp/internal/lukstab"
 )
 
 const (
@@ -219,6 +222,21 @@ func cmdManifest(args []string) int {
 	}
 	defer cleanup()
 	fmt.Print(m.String())
+	return 0
+}
+
+// cmdLuksTab prints the LUKS table for a device or a detached header file, as
+// build places it at /etc/wisp/luks.tab: for hand-written manifests and for a
+// verifier who wants to see what the init will act on.
+func cmdLuksTab(args []string) int {
+	if len(args) != 1 {
+		return die("luks-tab: give the LUKS2 device or a detached header file")
+	}
+	tab, err := luksmeta.Read(args[0])
+	if err != nil {
+		return die("%v", err)
+	}
+	os.Stdout.Write(tab.Marshal())
 	return 0
 }
 
@@ -430,6 +448,27 @@ func assemble(kernel, stage string) (*initrd.Manifest, error) {
 			return nil, fmt.Errorf("luks.header %s: %w", h, err)
 		}
 		m.Files = append(m.Files, initrd.FileSpec{Archive: h, Source: h})
+	}
+
+	// 4b. the LUKS table: keyslots, digests and segments as the init needs them,
+	//     read from the header now, so that the init never parses the header
+	if key != "none" {
+		src := conf["luks.header"]
+		if src == "" {
+			dev, err := luks.FindByUUID(conf["luks.uuid"])
+			if err != nil {
+				return nil, fmt.Errorf("luks.uuid %s: %w (the container must be present to record its header)", conf["luks.uuid"], err)
+			}
+			src = dev
+		}
+		tab, err := luksmeta.Read(src)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(filepath.Join(stage, "luks.tab"), tab.Marshal(), 0o644); err != nil {
+			return nil, err
+		}
+		m.Files = append(m.Files, initrd.FileSpec{Archive: lukstab.Path, Source: filepath.Join(stage, "luks.tab")})
 	}
 
 	// 5. a key provider and its configuration

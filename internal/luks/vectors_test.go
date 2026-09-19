@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-package luks
+package luks_test
 
 // The LUKS2 vector under ../../vectors/luks: a container formatted by
 // cryptsetup with a known passphrase and a dumped volume key. Regenerated
 // with -update (cryptsetup needed); verified without cryptsetup.
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -16,6 +17,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wisp/internal/luks"
+	"wisp/internal/luksmeta"
 )
 
 var update = flag.Bool("update", false, "regenerate the vectors under ../../vectors")
@@ -45,7 +49,7 @@ func TestVectorLuks2(t *testing.T) {
 			t.Fatalf("luksDump: %v\n%s", err, out)
 		}
 		mk, _ := os.ReadFile(vk)
-		v, err := Recover(img, img, []byte(pw))
+		v, err := recover(t, img, img, []byte(pw))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,16 +63,32 @@ func TestVectorLuks2(t *testing.T) {
 	if err != nil {
 		t.Skipf("vector missing (%v); run with -update", err)
 	}
+	// the table the builder derives from this header: what the init acts on
+	tab, err := luksmeta.Read(img)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tabPath := filepath.Join(luksVector, "expected.luks.tab")
+	if *update {
+		os.WriteFile(tabPath, tab.Marshal(), 0o644)
+	}
+	wantTab, err := os.ReadFile(tabPath)
+	if err != nil {
+		t.Fatalf("%s: %v (run with -update)", tabPath, err)
+	}
+	if !bytes.Equal(wantTab, tab.Marshal()) {
+		t.Fatalf("luks table differs from the vector\n got:\n%s\nwant:\n%s", tab.Marshal(), wantTab)
+	}
 	wantHex, _ := os.ReadFile(filepath.Join(luksVector, "master-key.hex"))
 	want, err := hex.DecodeString(strings.TrimSpace(string(wantHex)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := Recover(img, img, []byte(strings.TrimSpace(string(pw))))
+	v, err := recover(t, img, img, []byte(strings.TrimSpace(string(pw))))
 	if err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	if !constEqual(v.MasterKey, want) {
+	if !bytes.Equal(v.MasterKey, want) {
 		t.Fatalf("volume key differs from the vector\n got %x\nwant %x", v.MasterKey, want)
 	}
 	seg, _ := os.ReadFile(filepath.Join(luksVector, "segment.txt"))
@@ -76,7 +96,7 @@ func TestVectorLuks2(t *testing.T) {
 		t.Fatalf("segment differs: %+v vs\n%s", v, seg)
 	}
 	wrong, _ := os.ReadFile(filepath.Join(luksVector, "wrong-passphrase.txt"))
-	if _, err := Recover(img, img, []byte(strings.TrimSpace(string(wrong)))); !errors.Is(err, ErrNoKeyslot) {
+	if _, err := recover(t, img, img, []byte(strings.TrimSpace(string(wrong)))); !errors.Is(err, luks.ErrNoKeyslot) {
 		t.Fatalf("wrong passphrase: %v", err)
 	}
 }

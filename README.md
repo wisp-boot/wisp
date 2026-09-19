@@ -28,8 +28,11 @@ to reach a shell through.
    modules; the init never opens a module file, the kernel decompresses it in `finit_module`.
 3. Wait for the LUKS2 container with the configured UUID.
 4. Obtain the key: `none`, `passphrase`, `credential`, or a key provider process.
-5. Recover the volume key from a keyslot and create the dm-crypt mapping through the
-   device-mapper ioctl. Replay the recorded volume table over it, if root is on a logical volume.
+5. Hash the header's JSON area on the device and compare it with the measured table `luks.tab`
+   the builder wrote from it; on a match, recover the volume key from a keyslot as the table
+   describes and create the dm-crypt mapping through the device-mapper ioctl. The init never
+   parses the header. Replay the recorded volume table over the mapping, if root is on a
+   logical volume.
 6. Find the root file system by UUID or path, mount it read-only.
 7. Move the pseudo file systems, chroot, exec `/sbin/init`.
 
@@ -101,6 +104,13 @@ many costs archive size and early-boot memory, not time.
 
 `/etc/wisp/lvm.tab`, the device-mapper table of the root logical volume. Recorded from the
 running system when absent. Rebuild the initramfs after resizing the root volume.
+
+`/etc/wisp/luks.tab`, the container's keyslots, digests and segments as the builder read them
+from the LUKS2 header, with the SHA-256 of the header's JSON area. At boot the init hashes the
+header and compares; it does not parse it. **After any change to the header — `luksAddKey`,
+`luksChangeKey`, `luksKillSlot`, `luksConvert`, a new PBKDF setting — rebuild the initramfs**
+(`update-initramfs -u`), or the next boot halts with "header changed since the initramfs was
+built" instead of a passphrase prompt. `wisp luks-tab <device>` prints the table.
 
 ## Key sources
 
